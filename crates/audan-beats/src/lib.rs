@@ -69,25 +69,44 @@ pub fn track_beats(
     let mel = MelFrontend::compute(signal, DEFAULT_N_MELS);
     let activations = backend.run(&mel)?;
 
+    // Tempo is estimated from the *whole* activation curve's periodicity
+    // (a global tempogram search, robust to which sub-pulse happens to
+    // peak-pick loudest) before any discrete beat is picked, and that
+    // estimate then *informs* beat selection -- not the other way around.
+    // Picking beats first via plain peak-picking and only asking "what
+    // tempo does this imply" afterward (the previous pipeline order) can
+    // never correct a beat sequence that locked onto the wrong pulse (e.g.
+    // hi-hats at 2x the true tempo): by the time you're computing stats
+    // from it, the wrong beats are already final.
     let postproc = PostProcessor::default();
-    let detected = postproc.detect_beats(&activations, mel.grid);
+    let tempo_analyser = TempoAnalyser::default();
+    let candidates = tempo_analyser.tempo_candidates(&activations, mel.grid);
+    let target_bpm = candidates.top().value;
+
+    let detected = postproc.detect_beats_at_tempo(&activations, mel.grid, target_bpm);
     if detected.times.len() < 2 {
         return Err(AudanError::InvalidInput(
             "beat tracking found fewer than two beats; cannot derive tempo".into(),
         ));
     }
 
-    let tempo_analyser = TempoAnalyser::default();
+    // Stability (jitter/drift/class) and the headline `median_bpm` are
+    // recomputed from the tempo-locked beats, so they describe the same
+    // sequence the grid actually reports rather than an earlier, possibly
+    // differently-paced candidate.
     let stats = tempo_analyser
         .analyse(&detected.times)
         .expect("at least two monotonically increasing beats were just confirmed above");
-    let candidates = tempo_analyser.tempo_candidates(stats.median_bpm, &activations, mel.grid);
 
     let meter_estimator = MeterEstimator::default();
     let meter_result = meter_estimator.estimate(&detected.confidence);
 
-    let downbeats =
-        postproc.snap_downbeats(&detected.times, &activations, meter_result.beats_per_bar);
+    let downbeats = postproc.snap_downbeats(
+        &detected.times,
+        &activations,
+        meter_result.beats_per_bar,
+        mel.grid,
+    );
 
     let frames: FramesMeta = mel.grid.into();
 

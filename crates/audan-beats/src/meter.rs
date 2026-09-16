@@ -3,7 +3,15 @@
 //! Tests candidate beats-per-bar values by grouping a per-beat strength
 //! sequence into phases modulo each candidate and measuring how much
 //! stronger the best phase is than the average phase -- a real, if
-//! heuristic, periodicity test, not a hardcoded `4`.
+//! heuristic, periodicity test, not a hardcoded `4`. Near-ties are broken by
+//! a mild prior favouring more common meters ([`meter_prior`]), the same
+//! idea as [`crate::tempo::TempoAnalyser::tempo_candidates`]'s tempo prior
+//! and for the same reason: raw periodicity-strength scores alone are
+//! genuinely ambiguous between related candidates (a signal that's well
+//! explained by a 6-beat grouping is, by construction, at least as well
+//! explained by a 3-beat grouping sampled at half the rate -- confirmed
+//! directly in this module's own tests), so some outside signal is needed to
+//! prefer one over the other when the raw scores don't clearly decide it.
 
 pub struct MeterResult {
     pub beats_per_bar: u8,
@@ -19,6 +27,22 @@ impl Default for MeterEstimator {
         Self {
             candidates: vec![2, 3, 4, 6],
         }
+    }
+}
+
+/// A mild preference for more common meters, used only to break near-ties
+/// (see [`MeterEstimator::estimate`]'s doc comment). 4/4 is by a wide margin
+/// the most common meter in Western popular/electronic music; the rest are
+/// ordered roughly by how often they appear after it. Deliberately gentle
+/// (never more than a ~1.7x factor) so a signal with real, strong evidence
+/// for an unusual meter still wins -- this only tips a genuine coin-flip.
+fn meter_prior(n: u8) -> f64 {
+    match n {
+        4 => 1.0,
+        3 => 0.9,
+        2 => 0.8,
+        6 => 0.75,
+        _ => 0.7,
     }
 }
 
@@ -73,7 +97,7 @@ impl MeterEstimator {
             // a meter that truly explains the periodicity should have one
             // clearly dominant phase (the downbeat position) and the rest
             // near baseline.
-            let score = max_phase_mean - overall_mean;
+            let score = (max_phase_mean - overall_mean) * meter_prior(n);
             scores.push((n, score));
         }
 

@@ -84,6 +84,87 @@ impl PostProcessor {
         DetectedBeats { times, confidence }
     }
 
+    /// Like [`Self::detect_beats`], but constrained to a known target tempo.
+    ///
+    /// Plain peak-picking (`detect_beats`) accepts *every* activation peak
+    /// that clears the threshold and isn't a near-duplicate, with no notion
+    /// of periodicity -- on real music this routinely locks onto the
+    /// densest strong transient (e.g. hi-hats at a clean subdivision of the
+    /// true beat) rather than the beat itself, since a hi-hat pattern can be
+    /// just as strong and far more frequent than the kick/snare pulse a
+    /// listener would call "the beat." The result is an internally
+    /// consistent but *wrong* beat grid: twice as many beats as the track
+    /// actually has, at twice the true tempo.
+    ///
+    /// Given an externally supplied `target_bpm` (from
+    /// [`crate::tempo::TempoAnalyser::tempo_candidates`], which estimates
+    /// tempo from the *whole* activation curve's periodicity via a
+    /// tempogram rather than from any single peak sequence, and is
+    /// therefore not fooled by which sub-pulse happens to peak-pick
+    /// loudest), this greedily walks forward in steps of the target
+    /// inter-beat interval, at each step keeping only the strongest raw
+    /// peak within a tolerance window around the expected position --
+    /// exactly the mechanism that turns "every onset, regardless of
+    /// periodicity" into "one onset per true beat." A brief dropout (no
+    /// peak found near an expected position) advances the expectation by
+    /// one period anyway rather than desynchronising every later beat.
+    pub fn detect_beats_at_tempo(
+        &self,
+        activations: &BeatActivations,
+        grid: FrameGrid,
+        target_bpm: f64,
+    ) -> DetectedBeats {
+        if !(target_bpm.is_finite() && target_bpm > 0.0) {
+            return self.detect_beats(activations, grid);
+        }
+        let raw = self.detect_beats(activations, grid);
+        if raw.times.len() < 2 {
+            return raw;
+        }
+
+        let target_ibi = 60.0 / target_bpm;
+        // Wide enough to absorb real tempo jitter/drift, tight enough to
+        // reject a neighbouring subdivision peak roughly half a period away.
+        let tol = (target_ibi * 0.35).max(0.02);
+
+        let mut times = Vec::new();
+        let mut confidence = Vec::new();
+        let mut expected = raw.times[0];
+        let mut idx = 0usize;
+        while idx < raw.times.len() {
+            let mut best: Option<(usize, f64, f32)> = None;
+            let mut j = idx;
+            while j < raw.times.len() && raw.times[j] < expected + tol {
+                if raw.times[j] >= expected - tol {
+                    let c = raw.confidence[j];
+                    if best.map(|(_, _, bc)| c > bc).unwrap_or(true) {
+                        best = Some((j, raw.times[j], c));
+                    }
+                }
+                j += 1;
+            }
+            match best {
+                Some((_, t, c)) => {
+                    times.push(t);
+                    confidence.push(c);
+                    expected = t + target_ibi;
+                    idx = j;
+                }
+                None => {
+                    // Nothing near the expected slot: advance one period and
+                    // skip past any raw peaks now behind the new window,
+                    // rather than getting stuck re-examining them forever.
+                    expected += target_ibi;
+                    while idx < raw.times.len() && raw.times[idx] < expected - tol {
+                        idx += 1;
+                    }
+                }
+            }
+        }
+
+        DetectedBeats { times, confidence }
+    }
+
     /// Chooses which detected beats are downbeats by testing every phase
     /// `0..beats_per_bar` and picking the one whose beats land, on average,
     /// on the strongest `activations.downbeat` energy. For the fallback
@@ -97,26 +178,29 @@ impl PostProcessor {
         beat_times: &[f64],
         activations: &BeatActivations,
         beats_per_bar: u8,
+        grid: FrameGrid,
     ) -> Vec<BeatIndex> {
         let n = beats_per_bar as usize;
         if beat_times.is_empty() || n == 0 {
             return Vec::new();
         }
 
+        // `activations.times` are evenly spaced (`MelFrontend` always uses a
+        // padded grid, where `FrameGrid::time_of(k) == k*hop/sr` exactly), so
+        // the nearest frame index can be computed directly in O(1) rather
+        // than by scanning every activation frame for every beat -- with a
+        // beat count and activation-frame count that both scale with track
+        // length, the earlier linear scan made this whole function
+        // effectively O(beats_per_bar * n_beats * n_frames).
+        let sr = grid.sample_rate as f64;
+        let hop = grid.hop as f64;
+        let last_idx = activations.downbeat.len().saturating_sub(1);
         let sample_at = |t: f64| -> f32 {
-            if activations.times.is_empty() {
+            if activations.downbeat.is_empty() {
                 return 0.0;
             }
-            let mut best_idx = 0usize;
-            let mut best_d = f64::MAX;
-            for (i, ft) in activations.times.iter().enumerate() {
-                let d = (ft.as_seconds() - t).abs();
-                if d < best_d {
-                    best_d = d;
-                    best_idx = i;
-                }
-            }
-            activations.downbeat.get(best_idx).copied().unwrap_or(0.0)
+            let idx = ((t * sr / hop).round() as i64).clamp(0, last_idx as i64) as usize;
+            activations.downbeat[idx]
         };
 
         let mut best_phase = 0usize;
@@ -185,6 +269,58 @@ mod tests {
     }
 
     #[test]
+    fn tempo_locked_detection_rejects_a_subdivision_pulse() {
+        // A strong beat pulse every 40 frames, plus an equally-strong
+        // subdivision pulse every 20 frames in between (a hi-hat playing
+        // twice as fast as the true beat -- exactly the real-world failure
+        // mode this method exists to correct). Plain `detect_beats` cannot
+        // tell the two apart and keeps every peak; `detect_beats_at_tempo`,
+        // told the true beat's tempo, should keep only the beat-period ones.
+        let grid = FrameGrid::new(22_050, 256, 512, PadMode::Reflect);
+        let n_frames = 400;
+        let beat_period = 40usize;
+        let sub_period = 20usize;
+        let mut values = vec![0.0f32; n_frames];
+        for i in (0..n_frames).step_by(sub_period) {
+            values[i] = 0.6;
+        }
+        for i in (0..n_frames).step_by(beat_period) {
+            values[i] = 0.6; // same strength as the subdivision peaks
+        }
+        let activations = activations_from_values(grid, values);
+
+        let pp = PostProcessor::default();
+        let raw = pp.detect_beats(&activations, grid);
+        assert_eq!(
+            raw.times.len(),
+            n_frames / sub_period,
+            "sanity check: plain peak-picking keeps every subdivision peak"
+        );
+
+        // frames/sec = 22050/256 = 86.13; beat_period=40 frames => IBI =
+        // 40/86.13 = 0.4645s => ~129.2 BPM.
+        let target_bpm = 60.0 * (22_050.0 / 256.0) / beat_period as f64;
+        let locked = pp.detect_beats_at_tempo(&activations, grid, target_bpm);
+
+        assert!(
+            locked.times.len() >= n_frames / beat_period - 1
+                && locked.times.len() <= n_frames / beat_period + 1,
+            "expected roughly {} tempo-locked beats, got {}: {:?}",
+            n_frames / beat_period,
+            locked.times.len(),
+            locked.times
+        );
+        for w in locked.times.windows(2) {
+            let ibi = w[1] - w[0];
+            let target_ibi = 60.0 / target_bpm;
+            assert!(
+                (ibi - target_ibi).abs() < target_ibi * 0.5,
+                "consecutive locked beats {ibi}s apart, expected ~{target_ibi}s"
+            );
+        }
+    }
+
+    #[test]
     fn snap_downbeats_picks_the_strongest_phase() {
         let grid = FrameGrid::new(22_050, 256, 512, PadMode::Reflect);
         // 8 evenly spaced beats; every 4th (phase 0) lands on a strong
@@ -206,7 +342,7 @@ mod tests {
         };
 
         let pp = PostProcessor::default();
-        let downbeats = pp.snap_downbeats(&beat_times, &activations, 4);
+        let downbeats = pp.snap_downbeats(&beat_times, &activations, 4, grid);
         assert_eq!(downbeats, vec![0, 4]);
     }
 }

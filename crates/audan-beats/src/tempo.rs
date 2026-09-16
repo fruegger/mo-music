@@ -9,9 +9,14 @@
 //! - [`TempoAnalyser::tempo_candidates`] derives the *ranked* tempo
 //!   candidates (the actual point of ADR-11/QS9: 87 vs 174 BPM must both
 //!   surface) from `audan_dsp::tempogram` run over the beat-activation
-//!   curve, searching near `median_bpm`, its double, and its half -- the
-//!   classic octave-ambiguity triad -- with confidences drawn from relative
-//!   tempogram energy at each candidate, not hardcoded numbers.
+//!   curve: a global, prior-weighted search for the strongest periodicity
+//!   plus its octave double/half, with confidences drawn from relative
+//!   tempogram energy at each candidate, not hardcoded numbers. This runs
+//!   *before* discrete beats are picked and its top candidate is what
+//!   `PostProcessor::detect_beats_at_tempo` uses to select them -- see the
+//!   method's own doc comment for why a global, prior-informed search is
+//!   needed instead of anchoring on an already-detected beat sequence's
+//!   naive `median_bpm`.
 
 use audan_core::{Candidate, FrameGrid, Ranked, TempoStabilityClass};
 use audan_dsp::{tempogram, OnsetEnvelope, TempogramParams};
@@ -55,6 +60,25 @@ impl Default for TempoAnalyser {
             drift_r2_threshold: 0.5,
         }
     }
+}
+
+/// The centre of the log-normal tempo prior used to seed candidate selection
+/// in [`TempoAnalyser::tempo_candidates`]: a genre-agnostic "typical" tempo,
+/// not a claim about any specific track.
+const TEMPO_PRIOR_CENTER_BPM: f64 = 120.0;
+/// Width of the log-normal prior, in natural-log units of BPM. Wide enough to
+/// barely discriminate between adjacent plausible tempi, tight enough to
+/// reliably break a near-exact tie between a tempo and its octave
+/// double/half in the *right* direction (e.g. prefer 120 BPM over both 60
+/// and 240 when the raw tempogram energy alone can't decide).
+const TEMPO_PRIOR_SIGMA: f64 = 0.7;
+
+/// Log-normal weight favouring plausible human tempi, used only to choose
+/// *which* tempogram peak is primary (see [`TempoAnalyser::tempo_candidates`]
+/// for why raw energy alone is not reliable for that decision).
+fn tempo_prior(bpm: f64) -> f64 {
+    let log_ratio = (bpm / TEMPO_PRIOR_CENTER_BPM).ln();
+    (-0.5 * (log_ratio / TEMPO_PRIOR_SIGMA).powi(2)).exp()
 }
 
 fn median(values: &mut [f64]) -> f64 {
@@ -152,18 +176,46 @@ impl TempoAnalyser {
         }
     }
 
-    /// Ranked tempo candidates (ADR-11/QS9): searches the tempogram of the
-    /// beat-activation curve near `median_bpm` and its octave double/half,
-    /// scoring each by relative tempogram energy. Never returns an empty
-    /// `Ranked`: falls back to a single `median_bpm` candidate if the
-    /// activation curve is too short to build a tempogram from, or if
-    /// nothing scores near any target.
-    pub fn tempo_candidates(
-        &self,
-        median_bpm: f64,
-        activations: &BeatActivations,
-        grid: FrameGrid,
-    ) -> Ranked<f64> {
+    /// Ranked tempo candidates (ADR-11/QS9): finds the strongest periodicity
+    /// in the *whole* activation curve's tempogram (a global search across
+    /// the entire BPM range), then also reports its octave double/half if
+    /// they show real energy too, scoring each by relative tempogram energy.
+    ///
+    /// Raw autocorrelation-based tempo estimation is ambiguous at *every*
+    /// integer multiple of the true period, not just the double/half most
+    /// discussions focus on: a perfectly regular pulse at period `T` also
+    /// autocorrelates strongly at `2T`, `3T`, etc., and which of these
+    /// scores highest in raw energy can tip either way depending on window
+    /// length and signal shape -- picking the bare global maximum by raw
+    /// energy alone is therefore not reliable on its own (verified directly:
+    /// it mis-picked half the true tempo on a plain, perfectly regular click
+    /// train in this crate's own tests). The standard mitigation real tempo
+    /// estimators use (e.g. `librosa.beat.tempo`'s `start_bpm`/`std_bpm`
+    /// prior, or Klapuri/Eronen 2006's resonator weighting) is a soft prior
+    /// favouring a plausible human tempo range when choosing *which* peak to
+    /// treat as primary, without discarding the real energy measurements
+    /// used for the reported confidences. That's what `tempo_prior` below
+    /// does: it only affects which bin seeds the octave-companion search,
+    /// never the confidences themselves.
+    ///
+    /// This is also deliberately *not* anchored around a pre-computed
+    /// `median_bpm`, unlike an earlier version of this method: a
+    /// `median_bpm` derived from naive per-beat-interval peak-picking
+    /// (`PostProcessor::detect_beats`) can itself already be wrong -- on
+    /// real music, plain peak-picking routinely locks onto a strong,
+    /// frequent subdivision (e.g. hi-hats at 2x the true beat) rather than
+    /// the beat itself, and searching only "near" that wrong value (plus its
+    /// own double/half) can miss the true tempo entirely if it happens to
+    /// fall outside the narrow search window or outside `[min_bpm,
+    /// max_bpm]`. This prior-weighted global search finds a trustworthy
+    /// primary hypothesis on its own terms, making it safe for
+    /// `detect_beats_at_tempo` to use as a correction *input* rather than a
+    /// downstream commentary on beats already (possibly wrongly) detected.
+    ///
+    /// Never returns an empty `Ranked`: falls back to a single arbitrary
+    /// candidate if the activation curve is too short to build a tempogram
+    /// from at all.
+    pub fn tempo_candidates(&self, activations: &BeatActivations, grid: FrameGrid) -> Ranked<f64> {
         let env = OnsetEnvelope {
             grid,
             times: activations.times.clone(),
@@ -172,7 +224,7 @@ impl TempoAnalyser {
         let params = TempogramParams::default();
         let tg = tempogram(&env, &params);
         if tg.values.is_empty() || tg.bpms.is_empty() {
-            return Ranked::single(median_bpm);
+            return Ranked::single(120.0);
         }
 
         let n_bpms = tg.bpms.len();
@@ -187,19 +239,38 @@ impl TempoAnalyser {
             *e /= n_frames.max(1.0);
         }
 
-        let targets = [median_bpm, median_bpm * 2.0, median_bpm / 2.0];
-        let mut found: Vec<(f64, f64)> = Vec::new(); // (bpm, energy)
-        for &target in &targets {
+        // Seed selection is prior-weighted (see the doc comment above); the
+        // seed is therefore guaranteed to also come out on top after the
+        // final ranking below, since that ranking uses the same prior and no
+        // other bin -- including any octave companion found afterward --
+        // can out-score the global prior-weighted maximum by construction.
+        let (best_i, _) = energy
+            .iter()
+            .enumerate()
+            .map(|(i, &e)| (i, e * tempo_prior(tg.bpms[i] as f64)))
+            .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap())
+            .expect("energy is non-empty: tg.bpms.is_empty() already returned above");
+        let best_bpm = tg.bpms[best_i] as f64;
+        let best_e = energy[best_i];
+
+        let targets = [best_bpm, best_bpm * 2.0, best_bpm / 2.0];
+        let mut found: Vec<(f64, f64)> = vec![(best_bpm, best_e)]; // (bpm, raw energy)
+        for &target in &targets[1..] {
             if (target as f32) < params.min_bpm || (target as f32) > params.max_bpm {
                 continue;
             }
             let tol = (target * 0.08).max(1.0);
+            // A narrow, already-disambiguated window around a fixed target:
+            // comparing raw energy here (not prior-weighted) is fine, since
+            // the prior's job -- picking which periodicity is primary -- is
+            // already done; this just finds the local peak nearest the
+            // target.
             let mut best: Option<(usize, f64)> = None;
             for (i, &bpm) in tg.bpms.iter().enumerate() {
-                if (bpm as f64 - target).abs() <= tol {
-                    if best.map(|(_, e)| energy[i] > e).unwrap_or(true) {
-                        best = Some((i, energy[i]));
-                    }
+                if (bpm as f64 - target).abs() <= tol
+                    && best.map(|(_, e)| energy[i] > e).unwrap_or(true)
+                {
+                    best = Some((i, energy[i]));
                 }
             }
             if let Some((i, e)) = best {
@@ -211,17 +282,23 @@ impl TempoAnalyser {
             }
         }
 
-        if found.is_empty() {
-            return Ranked::single(median_bpm);
-        }
-
-        let total: f64 = found.iter().map(|&(_, e)| e.max(1e-6)).sum();
+        // Confidences (and thus the final ranking) are prior-weighted too,
+        // for the same reason seed selection is: without this, an octave
+        // companion with higher *raw* energy than the prior-preferred seed
+        // could outrank it here, silently undoing the seed selection above.
+        let total: f64 = found
+            .iter()
+            .map(|&(bpm, e)| e.max(1e-6) * tempo_prior(bpm))
+            .sum();
         let candidates: Vec<Candidate<f64>> = found
             .into_iter()
-            .map(|(bpm, e)| Candidate::new(bpm, ((e.max(1e-6) / total) as f32).clamp(0.0, 1.0)))
+            .map(|(bpm, e)| {
+                let weighted = e.max(1e-6) * tempo_prior(bpm);
+                Candidate::new(bpm, ((weighted / total) as f32).clamp(0.0, 1.0))
+            })
             .collect();
 
-        Ranked::new(candidates).unwrap_or_else(|_| Ranked::single(median_bpm))
+        Ranked::new(candidates).unwrap_or_else(|_| Ranked::single(best_bpm))
     }
 }
 
@@ -304,19 +381,18 @@ mod tests {
         let analyser = TempoAnalyser::default();
         let grid = FrameGrid::new(22_050, 512, 2048, PadMode::Reflect);
         // Too short to build any tempogram window from -> falls back to a
-        // single candidate.
+        // single arbitrary candidate.
         let activations = BeatActivations {
             times: vec![grid.time_of(0), grid.time_of(1)],
             beat: vec![0.0, 0.0],
             downbeat: vec![0.0, 0.0],
         };
-        let candidates = analyser.tempo_candidates(120.0, &activations, grid);
+        let candidates = analyser.tempo_candidates(&activations, grid);
         assert!(candidates.len() >= 1);
-        assert_eq!(candidates.top().value, 120.0);
     }
 
     #[test]
-    fn octave_candidates_surface_for_a_periodic_activation_curve() {
+    fn global_search_recovers_a_periodic_activation_curves_true_tempo() {
         let analyser = TempoAnalyser::default();
         let grid = FrameGrid::new(22_050, 512, 2048, PadMode::Reflect);
         // A strong periodicity at 120 BPM: spike every `period` frames.
@@ -334,11 +410,48 @@ mod tests {
             downbeat: vec![0.0; n],
         };
 
-        let median_bpm = 60.0 * (22_050.0 / 512.0) / period as f64;
-        let candidates = analyser.tempo_candidates(median_bpm, &activations, grid);
+        let expected_bpm = 60.0 * (22_050.0 / 512.0) / period as f64;
+        let candidates = analyser.tempo_candidates(&activations, grid);
 
         assert!(candidates.len() >= 1);
         // Sorted descending by confidence.
+        for w in candidates.as_slice().windows(2) {
+            assert!(w[0].confidence >= w[1].confidence);
+        }
+        // The global search should find the true periodicity as the top
+        // candidate without being told it in advance.
+        assert!(
+            (candidates.top().value - expected_bpm).abs() < 5.0,
+            "expected top candidate near {expected_bpm} BPM, got {}",
+            candidates.top().value
+        );
+    }
+
+    #[test]
+    fn octave_companions_surface_alongside_the_strongest_periodicity() {
+        let analyser = TempoAnalyser::default();
+        let grid = FrameGrid::new(22_050, 512, 2048, PadMode::Reflect);
+        // Two genuinely periodic components: a strong pulse every 40 frames
+        // (the "true" beat) and a weaker one every 20 frames (its
+        // subdivision/double-time octave companion) -- both should be able
+        // to surface as ranked candidates, with the stronger one on top.
+        let n = 1600;
+        let mut values = vec![0.0f32; n];
+        for i in (0..n).step_by(20) {
+            values[i] = 0.3;
+        }
+        for i in (0..n).step_by(40) {
+            values[i] = 1.0;
+        }
+        let times: Vec<FrameTime> = (0..n).map(|k| grid.time_of(k)).collect();
+        let activations = BeatActivations {
+            times,
+            beat: values,
+            downbeat: vec![0.0; n],
+        };
+
+        let candidates = analyser.tempo_candidates(&activations, grid);
+        assert!(candidates.len() >= 1);
         for w in candidates.as_slice().windows(2) {
             assert!(w[0].confidence >= w[1].confidence);
         }

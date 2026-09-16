@@ -37,12 +37,28 @@ fn mel_to_hz(m: f32) -> f32 {
     700.0 * (10f32.powf(m / 2595.0) - 1.0)
 }
 
+/// One triangular mel filter's nonzero span: weights `[start_bin,
+/// start_bin + weights.len())`, all other bins implicitly zero.
+struct MelFilter {
+    start_bin: usize,
+    weights: Vec<f32>,
+}
+
 /// Builds `n_mels` overlapping triangular filters spanning `0..sr/2`, each
-/// expressed as a sparse weight per STFT bin (`n_bins = win/2 + 1`). Standard
-/// construction (as in `librosa.filters.mel` / HTK): `n_mels + 2` points
-/// equally spaced in mel space give `n_mels` triangles, each rising from its
-/// left neighbour's centre and falling to its right neighbour's centre.
-fn mel_filterbank(n_mels: usize, n_bins: usize, sample_rate: u32, win: usize) -> Vec<Vec<f32>> {
+/// stored only over its nonzero span (`n_bins = win/2 + 1` total STFT bins,
+/// but any one triangular filter is nonzero over a small fraction of that --
+/// storing/iterating the full dense `n_bins`-length row per filter, as an
+/// earlier version of this function did, turns folding the STFT into mel
+/// bands into an `O(n_mels * n_bins)` operation per frame; since the `n_mels`
+/// triangles partition (with ~50% overlap) the same `n_bins` range, the
+/// sparse-span form below does the same fold in `O(n_bins)` total per frame,
+/// independent of `n_mels` -- this is the dominant cost of `MelFrontend`, so
+/// this shape matters for real-track-length performance, not just style.
+/// Standard construction (as in `librosa.filters.mel` / HTK): `n_mels + 2`
+/// points equally spaced in mel space give `n_mels` triangles, each rising
+/// from its left neighbour's centre and falling to its right neighbour's
+/// centre.
+fn mel_filterbank(n_mels: usize, n_bins: usize, sample_rate: u32, win: usize) -> Vec<MelFilter> {
     let sr = sample_rate as f32;
     let fmax = sr / 2.0;
     let mel_min = hz_to_mel(0.0);
@@ -56,17 +72,25 @@ fn mel_filterbank(n_mels: usize, n_bins: usize, sample_rate: u32, win: usize) ->
         .map(|&m| mel_to_hz(m) * win as f32 / sr)
         .collect();
 
-    let mut filters = vec![vec![0.0f32; n_bins]; n_mels];
-    for (m, filter) in filters.iter_mut().enumerate() {
+    let mut filters = Vec::with_capacity(n_mels);
+    for m in 0..n_mels {
         let (left, center, right) = (bin_points[m], bin_points[m + 1], bin_points[m + 2]);
-        for (bin, weight) in filter.iter_mut().enumerate() {
+        let last_bin = n_bins.saturating_sub(1);
+        let start_bin = (left.floor().max(0.0) as usize).min(last_bin);
+        let end_bin = ((right.ceil() as isize).max(0) as usize + 1).min(n_bins);
+        let mut weights = Vec::with_capacity(end_bin.saturating_sub(start_bin));
+        for bin in start_bin..end_bin {
             let b = bin as f32;
-            if center > left && b >= left && b <= center {
-                *weight = (b - left) / (center - left);
+            let w = if center > left && b >= left && b <= center {
+                (b - left) / (center - left)
             } else if right > center && b > center && b <= right {
-                *weight = (right - b) / (right - center);
-            }
+                (right - b) / (right - center)
+            } else {
+                0.0
+            };
+            weights.push(w);
         }
+        filters.push(MelFilter { start_bin, weights });
     }
     filters
 }
@@ -88,10 +112,8 @@ impl MelFrontend {
             let mut mel_frame = vec![0.0f32; n_mels];
             for (m, filter) in filters.iter().enumerate() {
                 let mut energy = 0.0f32;
-                for (bin, &w) in filter.iter().enumerate() {
-                    if w > 0.0 {
-                        energy += w * mag[bin];
-                    }
+                for (offset, &w) in filter.weights.iter().enumerate() {
+                    energy += w * mag[filter.start_bin + offset];
                 }
                 // log1p-style compression: robust at energy == 0, standard
                 // for mel-spectrogram frontends feeding a neural model.
