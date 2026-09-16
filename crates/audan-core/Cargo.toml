@@ -1,0 +1,16 @@
+[package]
+name = "audan-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Shared domain types for audan: FrameTime, FrameGrid, BeatGrid, Chroma, Candidate<T>, Confidence, and the error taxonomy. No I/O, no DSP."
+
+[dependencies]
+serde = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }

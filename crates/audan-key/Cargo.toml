@@ -1,0 +1,15 @@
+[package]
+name = "audan-key"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Key estimation: chroma aggregation, profile correlation, Camelot / Open Key mapping."
+
+[dependencies]
+audan-core = { workspace = true }
+audan-dsp = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }

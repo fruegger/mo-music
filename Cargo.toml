@@ -1,0 +1,70 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/audan-core",
+    "crates/audan-cache",
+    "crates/audan-io",
+    "crates/audan-dsp",
+    "crates/audan-model",
+    "crates/audan-beats",
+    "crates/audan-key",
+    "crates/audan-chords",
+    "crates/audan-struct",
+    "crates/audan-stems",
+    "crates/audan-format",
+    "crates/audan-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.78"
+license = "MIT OR Apache-2.0"
+authors = ["audan contributors"]
+repository = "https://github.com/audan-rs/audan"
+description = "audan -- a suite of music-information-retrieval command line utilities"
+
+[workspace.dependencies]
+# intra-workspace
+audan-core = { path = "crates/audan-core" }
+audan-cache = { path = "crates/audan-cache" }
+audan-io = { path = "crates/audan-io" }
+audan-dsp = { path = "crates/audan-dsp" }
+audan-model = { path = "crates/audan-model" }
+audan-beats = { path = "crates/audan-beats" }
+audan-key = { path = "crates/audan-key" }
+audan-chords = { path = "crates/audan-chords" }
+audan-struct = { path = "crates/audan-struct" }
+audan-stems = { path = "crates/audan-stems" }
+audan-format = { path = "crates/audan-format" }
+
+# shared external deps (kept in sync across crates; see audan-architecture-arc42.md S5.1)
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "1"
+anyhow = "1"
+blake3 = "1"
+zstd = "0.13"
+redb = "2"
+rustfft = "6"
+realfft = "3"
+ndarray = "0.16"
+nalgebra = "0.33"
+symphonia = { version = "0.5", features = ["all"] }
+rubato = "0.15"
+hound = "3"
+lofty = "0.21"
+ureq = "2"
+sha2 = "0.10"
+rten = "0.16"
+clap = { version = "4", features = ["derive", "env"] }
+midly = "0.5"
+rayon = "1"
+toml = "0.8"
+directories = "5"
+tempfile = "3"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

@@ -1,0 +1,15 @@
+[package]
+name = "audan-chords"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Chord transcription: beat-synchronous chroma, templates, HMM with Viterbi decoding."
+
+[dependencies]
+audan-core = { workspace = true }
+audan-dsp = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }

@@ -1,0 +1,18 @@
+[package]
+name = "audan-stems"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Pluggable stem separation backends, chunked inference, overlap-add reconstruction."
+
+[dependencies]
+audan-core = { workspace = true }
+audan-model = { workspace = true }
+serde = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+tempfile = { workspace = true }

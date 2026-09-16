@@ -1,0 +1,5 @@
+/target/
+**/*.rs.bk
+.audan-cache*/
+*.wav
+!resources/**/*.wav

@@ -1,0 +1,24 @@
+{
+  "models": [
+    {
+      "name": "beat_this",
+      "version": "1.0",
+      "url": "https://models.audan.dev/beat_this/1.0/model.onnx",
+      "sha256": "986e020942360554c22cb0f2c4a0de2d66b87d02312e8d727413abee505df1c1",
+      "size_bytes": 8388608,
+      "license_id": "MIT",
+      "license_text_url": "https://models.audan.dev/beat_this/1.0/LICENSE",
+      "license_note": "Code and published weights are both MIT. The authors note that some training files are fully copyrighted or under limited Creative Commons licenses and leave that assessment to the user (RISK-3)."
+    },
+    {
+      "name": "htdemucs",
+      "version": "4.0",
+      "url": "https://models.audan.dev/htdemucs/4.0/model.onnx",
+      "sha256": "c27fced518b9341da73a2cec76d34d011b2ce2df56b5e5e308f2074f1b434159",
+      "size_bytes": 83886080,
+      "license_id": "unclear",
+      "license_text_url": null,
+      "license_note": "Demucs weights licensing is genuinely unresolved (RISK-1). The code is MIT, but the author stated in repository issues (#267, #327, #508) that the weights are not covered by MIT and are provided for research purposes, citing MUSDB dataset terms -- while a later Hugging Face model card carries an 'mit' license tag. The contradiction is unresolved. This model is not presented as unambiguously safe; review the source discussion yourself before accepting."
+    }
+  ]
+}

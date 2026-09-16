@@ -1,0 +1,41 @@
+# Default audan analysis parameters (arc42 doc S7.2, S8.8).
+#
+# Precedence, lowest to highest: compiled defaults (this file, embedded via
+# include_str! into audan-cli) -> $XDG_CONFIG_HOME/audan/analysis.toml ->
+# AUDAN_* environment variables -> command-line flags. The resolved parameter
+# set is stamped into every output, so any audan JSON file is reproducible
+# without knowing the user's environment.
+
+[frames]
+# Sample rate the DSP layer analyses at (audan-core::ANALYSIS_SAMPLE_RATE).
+sample_rate = 22050
+hop = 512
+win = 2048
+# none | zero | reflect
+pad = "reflect"
+
+[beats]
+model = "beat_this"
+model_version = "1.0"
+
+[key]
+profile = "krumhansl"
+
+[chords]
+vocabulary = "majmin"
+
+[struct]
+# Section labelling is experimental (RISK-8); off by default.
+label_sections = false
+
+[stems]
+# No default separation backend ships (RISK-1) -- must be chosen explicitly.
+model = ""
+
+[cache]
+# Overridable by $AUDAN_CACHE_DIR.
+budget_bytes = 5_000_000_000
+
+[strict]
+# Exit code 3 when the top candidate's confidence falls below this (S8.5, S8.9).
+min_confidence = 0.5

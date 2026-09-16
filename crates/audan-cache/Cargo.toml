@@ -1,0 +1,32 @@
+[package]
+name = "audan-cache"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Content-addressed cache: key derivation, blob store, index, resolver, eviction."
+
+[dependencies]
+audan-core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+blake3 = "=1.8.2"
+zstd = { workspace = true }
+redb = "=2.1.4"
+tempfile = { workspace = true }
+# Pin below the edition2024 bump in getrandom 0.4, which `cargo` 1.78 (this
+# workspace's pinned toolchain, rust-toolchain.toml) cannot even parse the
+# manifest of. tempfile pulls getrandom transitively (">=0.3.0, <0.5"); this
+# forces the graph onto a 0.3.x resolution instead of the default-picked
+# latest.
+getrandom = "0.3"
+# blake3's build-dependency `cc` pulls in `jobserver`; jobserver 0.1.35 bumped
+# to the same edition2024 getrandom 0.4 this workspace's toolchain can't
+# parse. Pin to the last 0.1.x release still on getrandom 0.3.
+jobserver = "=0.1.34"
+
+[dev-dependencies]
+tempfile = { workspace = true }

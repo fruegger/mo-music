@@ -1,0 +1,28 @@
+[package]
+name = "audan-model"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Model registry: manifest, HTTPS fetch, checksum verification, license gate."
+
+[dependencies]
+audan-core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+# Pinned (rather than `{ workspace = true }`) so we can turn off ureq's
+# default `tls` feature (rustls) in favour of `native-tls`, and so that `url`
+# stays on the pre-ICU4X 0.5.x `idna` line -- both `rustls` 0.23's and
+# `idna` 1.x's newer releases require Cargo's `edition2024`, which the
+# workspace's pinned MSRV toolchain (1.78, see rust-toolchain.toml) cannot
+# parse.
+ureq = { version = "=2.9.7", default-features = false, features = ["native-tls"] }
+native-tls = "=0.2.13"
+url = "=2.5.2"
+sha2 = { workspace = true }
+directories = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

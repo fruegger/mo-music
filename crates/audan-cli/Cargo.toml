@@ -1,0 +1,47 @@
+[package]
+name = "audan-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "audan: a suite of music-information-retrieval command line utilities."
+default-run = "audan"
+
+[[bin]]
+name = "audan"
+path = "src/main.rs"
+
+[dependencies]
+audan-core = { workspace = true }
+audan-cache = { workspace = true }
+audan-io = { workspace = true }
+audan-dsp = { workspace = true }
+audan-model = { workspace = true }
+audan-beats = { workspace = true }
+audan-key = { workspace = true }
+audan-chords = { workspace = true }
+audan-struct = { workspace = true }
+audan-stems = { workspace = true }
+audan-format = { workspace = true }
+anyhow = { workspace = true }
+# The workspace-level `clap = "4"` resolves to a `clap_derive` release that
+# requires Cargo's `edition2024` feature, unavailable on this workspace's
+# pinned rust-toolchain (1.78, predates edition2024 support -- see the root
+# Cargo.lock's other such pins, e.g. `blake3 = "=1.8.2"`). Pin directly to
+# the latest 4.x release still built on edition2021.
+clap = { version = "=4.5.13", features = ["derive", "env"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+toml = { workspace = true }
+directories = { workspace = true }
+rayon = { workspace = true }
+blake3 = { workspace = true }
+# Same edition2024 issue as clap above, via toml -> toml_edit -> indexmap.
+# Pin to versions still built on edition2021.
+indexmap = "=2.2.6"
+
+[dev-dependencies]
+tempfile = { workspace = true }
+hound = { workspace = true }
