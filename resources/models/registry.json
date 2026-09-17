@@ -3,12 +3,12 @@
     {
       "name": "beat_this",
       "version": "1.0",
-      "url": "https://models.audan.dev/beat_this/1.0/model.onnx",
-      "sha256": "986e020942360554c22cb0f2c4a0de2d66b87d02312e8d727413abee505df1c1",
-      "size_bytes": 8388608,
+      "url": "https://github.com/fruegger/mo-music/releases/download/beat_this-v1.0/beat_this-1.0.rten",
+      "sha256": "e72037d0b5bb909906f15384e0d20522fecdae97e7b2ec0847eeb318398baf8e",
+      "size_bytes": 84834176,
       "license_id": "MIT",
-      "license_text_url": "https://models.audan.dev/beat_this/1.0/LICENSE",
-      "license_note": "Code and published weights are both MIT. The authors note that some training files are fully copyrighted or under limited Creative Commons licenses and leave that assessment to the user (RISK-3)."
+      "license_text_url": "https://github.com/CPJKU/beat_this/blob/main/LICENSE",
+      "license_note": "Code and published weights are both MIT. The authors note that some training files are fully copyrighted or under limited Creative Commons licenses and leave that assessment to the user (RISK-3). This .rten file is CPJKU/beat_this's 'final0' checkpoint, exported to ONNX and converted with rten-convert -- see resources/models/beat_this/README.md to regenerate it."
     },
     {
       "name": "htdemucs",

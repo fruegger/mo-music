@@ -1,46 +1,44 @@
-//! Beat tracking: mel frontend, pluggable inference backend, minimal
-//! post-processing, tempo statistics, and meter estimation (S5.3 of
-//! `audan-architecture-arc42.md`).
+//! Beat tracking: pluggable inference backend (each owning its own
+//! frontend), minimal post-processing, tempo statistics, and meter
+//! estimation (S5.3 of `audan-architecture-arc42.md`).
 //!
-//! ## The model situation, stated plainly
+//! ## Two backends
 //!
-//! The architecture calls for Beat This! (ISMIR 2024) via ONNX as the
-//! primary backend, with a small default model embedded via
-//! `include_bytes!` so a bare `audan beats` works offline with no network,
-//! no Python, no toolchain (ADR-7, QS8, QS9). **No real trained Beat This!
-//! ONNX model is available in this environment** -- it can be neither
-//! trained nor sourced here. Building a backend around weights that do not
-//! exist would mean either shipping something that silently does nothing or
-//! faking numbers; neither is acceptable.
-//!
-//! So the crate is split cleanly along that line:
-//!
-//! - [`model::InferenceBackend`] is the real, general trait a genuine ONNX
-//!   backend would implement -- see [`model::OnnxBackend`], a compiling
-//!   skeleton behind the off-by-default `onnx-beats` feature with a clearly
-//!   marked `TODO` where a real `rten` forward pass would go.
-//! - [`model::OnsetFallbackBackend`] is the crate's actual, always-tested,
+//! - [`model::OnsetFallbackBackend`] is the crate's always-available,
 //!   zero-dependency default: a classical periodicity-based beat tracker
-//!   built entirely from `audan-dsp`'s (already implemented, already
-//!   tested) onset/tempogram machinery, applied over this crate's own mel
-//!   spectrogram. Periodicity-based beat tracking is a real, decades-old
-//!   MIR technique, not a stand-in pretending to be something else -- it is
-//!   simply less accurate than a trained neural tracker. This is what makes
-//!   [`track_beats_default`] actually work with no network and no model
-//!   file, in the spirit of QS8/QS9 even without the specific Beat This!
-//!   weights.
+//!   built over [`mel::MelFrontend`]'s HTK-scale mel spectrogram, using
+//!   `audan-dsp`'s onset/tempogram machinery. Periodicity-based beat
+//!   tracking is a real, decades-old MIR technique, not a stand-in
+//!   pretending to be something else -- it is simply less accurate than a
+//!   trained neural tracker. This is what makes [`track_beats_default`]
+//!   work with no network, no model file, and no feature flag.
+//! - [`model::OnnxBackend`] (behind the `onnx-beats` feature) runs the real
+//!   Beat This! (ISMIR 2024, CPJKU/beat_this, MIT-licensed) model via
+//!   `rten`, over [`onnx_frontend::OnnxFrontend`]'s Slaney-scale mel
+//!   spectrogram (bit-matched to the reference implementation) and
+//!   [`chunk`]'s fixed-size overlapping-chunk stitching (the exported model
+//!   only accepts a fixed frame count). See
+//!   `resources/models/beat_this/README.md` for how the model is produced.
+//!
+//! The two backends need genuinely different preprocessing, so
+//! [`model::InferenceBackend::run`] takes the raw analysis-rate signal, not
+//! a pre-computed spectrogram -- each backend computes its own.
 //!
 //! ## Pipeline
 //!
-//! [`track_beats`] runs, in order: [`mel::MelFrontend::compute`] ->
-//! `backend.run` -> [`postprocess::PostProcessor`] (beat detection, then
-//! downbeat snapping once meter is known) -> [`tempo::TempoAnalyser`] ->
-//! [`meter::MeterEstimator`] -> assembly into an `audan_core::BeatGrid`.
+//! [`track_beats`] runs, in order: `backend.run` (frontend + inference,
+//! entirely the backend's own concern) -> [`postprocess::PostProcessor`]
+//! (beat detection, then downbeat snapping once meter is known) ->
+//! [`tempo::TempoAnalyser`] -> [`meter::MeterEstimator`] -> assembly into an
+//! `audan_core::BeatGrid`.
 
+pub mod chunk;
 pub mod mel;
 pub mod meter;
 pub mod model;
+pub mod onnx_frontend;
 pub mod postprocess;
+pub mod resolve;
 pub mod tempo;
 
 use audan_core::{
@@ -66,8 +64,8 @@ pub fn track_beats(
     signal: &audan_core::MonoSignal,
     backend: &dyn InferenceBackend,
 ) -> Result<BeatGrid> {
-    let mel = MelFrontend::compute(signal, DEFAULT_N_MELS);
-    let activations = backend.run(&mel)?;
+    let activations = backend.run(signal)?;
+    let grid = activations.grid;
 
     // Tempo is estimated from the *whole* activation curve's periodicity
     // (a global tempogram search, robust to which sub-pulse happens to
@@ -80,10 +78,10 @@ pub fn track_beats(
     // from it, the wrong beats are already final.
     let postproc = PostProcessor::default();
     let tempo_analyser = TempoAnalyser::default();
-    let candidates = tempo_analyser.tempo_candidates(&activations, mel.grid);
+    let candidates = tempo_analyser.tempo_candidates(&activations, grid);
     let target_bpm = candidates.top().value;
 
-    let detected = postproc.detect_beats_at_tempo(&activations, mel.grid, target_bpm);
+    let detected = postproc.detect_beats_at_tempo(&activations, grid, target_bpm);
     if detected.times.len() < 2 {
         return Err(AudanError::InvalidInput(
             "beat tracking found fewer than two beats; cannot derive tempo".into(),
@@ -105,10 +103,10 @@ pub fn track_beats(
         &detected.times,
         &activations,
         meter_result.beats_per_bar,
-        mel.grid,
+        grid,
     );
 
-    let frames: FramesMeta = mel.grid.into();
+    let frames: FramesMeta = grid.into();
 
     Ok(BeatGrid {
         schema_version: BeatGrid::CURRENT_SCHEMA_VERSION,

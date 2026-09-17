@@ -199,7 +199,7 @@ mod tests {
         let compiled = AnalysisConfig::compiled_default();
         assert_eq!(compiled.strict.min_confidence, 0.5);
         assert_eq!(compiled.frames.pad, PadMode::Reflect);
-        assert_eq!(compiled.beats.model, "beat_this");
+        assert_eq!(compiled.beats.model, "");
         assert_eq!(compiled.cache.budget_bytes, 5_000_000_000);
     }
 
@@ -273,7 +273,7 @@ mod tests {
             "untouched section keeps the compiled default"
         );
         assert_eq!(
-            merged.beats.model, "beat_this",
+            merged.beats.model, "",
             "untouched section keeps the compiled default"
         );
     }

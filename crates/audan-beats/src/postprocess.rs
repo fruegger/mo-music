@@ -236,6 +236,7 @@ mod tests {
             times,
             beat: values,
             downbeat,
+            grid,
         }
     }
 
@@ -339,6 +340,7 @@ mod tests {
             times,
             beat: downbeat.clone(),
             downbeat,
+            grid,
         };
 
         let pp = PostProcessor::default();

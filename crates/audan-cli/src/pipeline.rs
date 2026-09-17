@@ -32,10 +32,9 @@
 
 use std::path::Path;
 
+use audan_beats::InferenceBackend;
 use audan_cache::{CacheKey, CacheLayer, KeyDeriver, Resolver};
-use audan_core::{
-    BeatGrid, FrameGrid, FramesMeta, MonoSignal, PadMode, Signal, ANALYSIS_SAMPLE_RATE,
-};
+use audan_core::{BeatGrid, FramesMeta, MonoSignal, Signal, ANALYSIS_SAMPLE_RATE};
 use serde::Serialize;
 
 use crate::render::StructureResultDto;
@@ -85,21 +84,21 @@ pub fn resolve_l1_analysis(
     Ok((key, mono))
 }
 
-/// `audan-beats`' mel frontend hardcodes hop=512/win=2048/`PadMode::Reflect`
-/// internally (`audan_beats::mel::MelFrontend::compute`) and is not
+/// Each backend has its own fixed frame geometry
+/// (`InferenceBackend::frame_grid`) -- e.g. `OnsetFallbackBackend`'s
+/// hop=512/win=2048, `OnnxBackend`'s hop=441/win=1024 -- and is not
 /// parameterized by `--pad` at all -- that flag only affects the key/chord
 /// chroma stages (`audan_dsp::{KeyChromaParams,ChordChromaParams}::pad`). A
 /// hand-corrected grid supplied via `--beats` (RV5) must therefore be
-/// validated against this fixed shape, independent of the resolved `--pad`
-/// config, or a perfectly valid grid computed with a non-default `--pad`
-/// elsewhere in the pipeline would be rejected for the wrong reason.
-pub fn expected_beats_frames() -> FramesMeta {
-    FrameGrid::new(ANALYSIS_SAMPLE_RATE, 512, 2048, PadMode::Reflect).into()
+/// validated against *whichever backend was actually selected*'s shape,
+/// independent of the resolved `--pad` config.
+pub fn expected_beats_frames(backend: &dyn InferenceBackend) -> FramesMeta {
+    backend.frame_grid(ANALYSIS_SAMPLE_RATE).into()
 }
 
 #[derive(Serialize)]
-struct BeatsParams<'a> {
-    backend: &'a str,
+struct BeatsParams {
+    backend: String,
 }
 
 /// Resolves the beat grid used by `beats`/`chords`/`struct`/`tag`: normally
@@ -107,12 +106,17 @@ struct BeatsParams<'a> {
 /// `Some` (RV5's `--beats grid.json`) -- loaded directly from a
 /// hand-corrected file, validated, and never written back into the L3 cache
 /// namespace (it's the user's own result, not a re-derivable cache entry).
+/// `backend`'s name+version is folded into the L3 cache key (the doc comment
+/// on this module's cache-key design calls this the invalidation lever for
+/// when a real backend replaces the fallback), so switching `--model` never
+/// serves a stale result computed under a different backend.
 pub fn resolve_beats(
     resolver: &Resolver,
     l1_key: &CacheKey,
     mono: &MonoSignal,
     beats_override: Option<&Path>,
     expected_frames: FramesMeta,
+    backend: &dyn InferenceBackend,
 ) -> anyhow::Result<(CacheKey, BeatGrid)> {
     if let Some(path) = beats_override {
         let text = std::fs::read_to_string(path)
@@ -125,9 +129,9 @@ pub fn resolve_beats(
         })?;
         if grid.frames != expected_frames {
             return Err(audan_core::AudanError::InvalidInput(format!(
-                "--beats {}: frames block {:?} does not match the fixed shape audan-beats \
-                 always produces ({:?}) -- foreign grids are rejected loudly on mismatch \
-                 rather than silently misaligning (S6.5)",
+                "--beats {}: frames block {:?} does not match the shape the selected backend \
+                 produces ({:?}) -- foreign grids are rejected loudly on mismatch rather than \
+                 silently misaligning (S6.5)",
                 path.display(),
                 grid.frames,
                 expected_frames
@@ -147,10 +151,10 @@ pub fn resolve_beats(
             &CacheLayer::L3.stage_id("beats"),
             1,
             &BeatsParams {
-                backend: "onset_fallback",
+                backend: format!("{}/{}", backend.name(), backend.version()),
             },
         );
-        let grid: BeatGrid = resolver.resolve(key, || audan_beats::track_beats_default(mono))?;
+        let grid: BeatGrid = resolver.resolve(key, || audan_beats::track_beats(mono, backend))?;
         Ok((key, grid))
     }
 }

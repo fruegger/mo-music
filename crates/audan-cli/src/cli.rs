@@ -106,6 +106,14 @@ pub enum Command {
         /// debugging instrument). In batch mode, applies to the first file.
         #[arg(long)]
         click: Option<PathBuf>,
+
+        /// Use a real neural backend (e.g. `beat_this`) instead of the
+        /// always-available onset_fallback default. Unlike `stems --model`,
+        /// this is optional: omitting it (or leaving `[beats] model` unset
+        /// in analysis.toml) keeps `audan beats` working fully offline with
+        /// no model, no network, no license prompt (ADR-7).
+        #[arg(long)]
+        model: Option<String>,
     },
 
     /// Estimate musical key, with Camelot / Open Key notation (F3).

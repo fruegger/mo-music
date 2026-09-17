@@ -19,7 +19,7 @@ audan-cache = { workspace = true }
 audan-io = { workspace = true }
 audan-dsp = { workspace = true }
 audan-model = { workspace = true }
-audan-beats = { workspace = true }
+audan-beats = { workspace = true, features = ["onnx-beats"] }
 audan-key = { workspace = true }
 audan-chords = { workspace = true }
 audan-struct = { workspace = true }

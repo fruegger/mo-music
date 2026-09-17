@@ -386,6 +386,7 @@ mod tests {
             times: vec![grid.time_of(0), grid.time_of(1)],
             beat: vec![0.0, 0.0],
             downbeat: vec![0.0, 0.0],
+            grid,
         };
         let candidates = analyser.tempo_candidates(&activations, grid);
         assert!(candidates.len() >= 1);
@@ -408,6 +409,7 @@ mod tests {
             times,
             beat: values,
             downbeat: vec![0.0; n],
+            grid,
         };
 
         let expected_bpm = 60.0 * (22_050.0 / 512.0) / period as f64;
@@ -448,6 +450,7 @@ mod tests {
             times,
             beat: values,
             downbeat: vec![0.0; n],
+            grid,
         };
 
         let candidates = analyser.tempo_candidates(&activations, grid);

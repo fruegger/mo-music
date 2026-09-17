@@ -113,8 +113,23 @@ fn install_atomically(dir: &Path, final_path: &Path, bytes: &[u8]) -> Result<()>
     Ok(())
 }
 
+/// `ureq`'s bare `ureq::get(url)` shortcut only ever uses its `rtls`
+/// (rustls) backend, even when the `native-tls` feature is enabled --
+/// `native-tls` "must be configured via the AgentBuilder [...] it is never
+/// picked up as a default" (ureq's own `lib.rs` comment). This crate is
+/// deliberately built with `default-features = false, features =
+/// ["native-tls"]` (see `Cargo.toml`'s comment on why rustls is avoided), so
+/// an explicit `Agent` with a `native_tls::TlsConnector` is required here;
+/// the bare shortcut would otherwise always fail every HTTPS fetch with
+/// "no TLS backend is configured" regardless of the URL.
 fn fetch_bytes(url: &str) -> Result<Vec<u8>> {
-    let response = ureq::get(url)
+    let tls_connector = native_tls::TlsConnector::new()
+        .map_err(|e| AudanError::Model(format!("failed to initialise TLS: {e}")))?;
+    let agent = ureq::AgentBuilder::new()
+        .tls_connector(std::sync::Arc::new(tls_connector))
+        .build();
+    let response = agent
+        .get(url)
         .call()
         .map_err(|e| AudanError::Model(format!("failed to fetch model from {url}: {e}")))?;
     let mut bytes = Vec::new();

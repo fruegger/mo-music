@@ -8,6 +8,7 @@ use std::path::Path;
 
 use audan_cache::Resolver;
 
+use crate::beats_backend;
 use crate::cli::Cli;
 use crate::config::Resolved;
 use crate::pipeline;
@@ -19,6 +20,10 @@ pub fn run(
     cli: &Cli,
     resolved: &Resolved,
 ) -> anyhow::Result<()> {
+    // See `commands::chords::run`: `struct` also has no `--model` of its
+    // own and uses the configured default backend.
+    let backend = beats_backend::resolve(None, cli, resolved)?;
+
     let resolver = Resolver::open(&resolved.cache_root)?;
     let (l0_key, signal) = pipeline::resolve_l0(&resolver, file)?;
     let (l1_key, mono) = pipeline::resolve_l1_analysis(&resolver, &l0_key, &signal)?;
@@ -27,7 +32,8 @@ pub fn run(
         &l1_key,
         &mono,
         beats_override,
-        pipeline::expected_beats_frames(),
+        pipeline::expected_beats_frames(backend.as_dyn()),
+        backend.as_dyn(),
     )?;
 
     let key_params = audan_dsp::KeyChromaParams {

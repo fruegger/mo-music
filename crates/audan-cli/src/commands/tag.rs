@@ -6,10 +6,12 @@ use std::path::Path;
 
 use audan_cache::Resolver;
 
+use crate::beats_backend;
+use crate::cli::Cli;
 use crate::config::Resolved;
 use crate::pipeline;
 
-pub fn run(file: &Path, write: &[String], resolved: &Resolved) -> anyhow::Result<()> {
+pub fn run(file: &Path, write: &[String], cli: &Cli, resolved: &Resolved) -> anyhow::Result<()> {
     let want_bpm = write.iter().any(|f| f.eq_ignore_ascii_case("bpm"));
     let want_key = write.iter().any(|f| f.eq_ignore_ascii_case("key"));
     if !want_bpm && !want_key {
@@ -25,12 +27,16 @@ pub fn run(file: &Path, write: &[String], resolved: &Resolved) -> anyhow::Result
 
     let mut update = audan_io::TagUpdate::default();
     if want_bpm {
+        // No `--model` of its own; uses the configured default backend, see
+        // `commands::chords::run`.
+        let backend = beats_backend::resolve(None, cli, resolved)?;
         let (_beats_key, grid) = pipeline::resolve_beats(
             &resolver,
             &l1_key,
             &mono,
             None,
-            pipeline::expected_beats_frames(),
+            pipeline::expected_beats_frames(backend.as_dyn()),
+            backend.as_dyn(),
         )?;
         update.bpm = Some(grid.tempo.median_bpm);
     }

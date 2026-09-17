@@ -83,8 +83,12 @@ dependencies = [
  "audan-core",
  "audan-dsp",
  "audan-model",
+ "realfft",
  "rten",
+ "rten-tensor",
  "serde",
+ "serde_json",
+ "tempfile",
  "thiserror",
 ]
 

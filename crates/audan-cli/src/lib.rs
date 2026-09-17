@@ -6,6 +6,7 @@
 //! integration tests can call [`run`] and the individual `commands::*::run`
 //! functions directly instead of shelling out to a compiled binary.
 
+pub mod beats_backend;
 pub mod cache_paths;
 pub mod cli;
 pub mod commands;
@@ -26,8 +27,8 @@ pub fn run(cli: Cli) -> anyhow::Result<()> {
 
     match &cli.command {
         Command::Probe { file } => commands::probe::run(file, cli.format, cli.quiet),
-        Command::Beats { files, click } => {
-            commands::beats::run(files, click.as_deref(), &cli, &resolved)
+        Command::Beats { files, click, model } => {
+            commands::beats::run(files, click.as_deref(), model.as_deref(), &cli, &resolved)
         }
         Command::Key { file } => commands::key::run(file, &cli, &resolved),
         Command::Chords { file, beats } => {
@@ -37,7 +38,7 @@ pub fn run(cli: Cli) -> anyhow::Result<()> {
             commands::struct_cmd::run(file, beats.as_deref(), &cli, &resolved)
         }
         Command::Stems { file, model } => commands::stems::run(file, model, &cli, &resolved),
-        Command::Tag { file, write } => commands::tag::run(file, write, &resolved),
+        Command::Tag { file, write } => commands::tag::run(file, write, &cli, &resolved),
         Command::Cache { action } => commands::cache::run(action, &resolved),
     }
 }

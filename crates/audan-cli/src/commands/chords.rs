@@ -8,6 +8,7 @@ use std::path::Path;
 
 use audan_cache::Resolver;
 
+use crate::beats_backend;
 use crate::cli::Cli;
 use crate::config::Resolved;
 use crate::pipeline;
@@ -19,6 +20,11 @@ pub fn run(
     cli: &Cli,
     resolved: &Resolved,
 ) -> anyhow::Result<()> {
+    // `chords` exposes no `--model` of its own; it uses whatever backend the
+    // user has configured as their default (`[beats] model`), or the
+    // fallback if unset -- see `beats_backend::resolve`.
+    let backend = beats_backend::resolve(None, cli, resolved)?;
+
     let resolver = Resolver::open(&resolved.cache_root)?;
     let (l0_key, signal) = pipeline::resolve_l0(&resolver, file)?;
     let (l1_key, mono) = pipeline::resolve_l1_analysis(&resolver, &l0_key, &signal)?;
@@ -27,7 +33,8 @@ pub fn run(
         &l1_key,
         &mono,
         beats_override,
-        pipeline::expected_beats_frames(),
+        pipeline::expected_beats_frames(backend.as_dyn()),
+        backend.as_dyn(),
     )?;
 
     let chord_params = audan_dsp::ChordChromaParams {

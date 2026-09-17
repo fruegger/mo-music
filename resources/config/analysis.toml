@@ -15,7 +15,12 @@ win = 2048
 pad = "reflect"
 
 [beats]
-model = "beat_this"
+# No default neural backend ships enabled: a bare `audan beats` must keep
+# working fully offline, no model, no network, no license prompt (ADR-7,
+# QS8/QS9) -- matching the `[stems]` convention below. Set this yourself
+# (or pass `--model` to `audan beats`) to opt into a real backend, e.g.
+# "beat_this".
+model = ""
 model_version = "1.0"
 
 [key]

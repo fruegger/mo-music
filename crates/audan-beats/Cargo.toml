@@ -12,20 +12,24 @@ description = "Beat tracking: mel frontend, pluggable inference backend (pure-DS
 default = []
 # Off by default (TC2, ADR-9): the shipped default path is the pure-DSP
 # `OnsetFallbackBackend`, which needs no model file and no extra dependency.
-# This feature adds a compiling skeleton for a future real ONNX (Beat This!)
-# backend behind `rten`; see `model::OnnxBackend` for why it is a stub.
-onnx-beats = ["dep:rten"]
+# This feature enables the real ONNX (Beat This!) backend behind `rten`; see
+# `model::OnnxBackend`.
+onnx-beats = ["dep:rten", "dep:rten-tensor"]
 
 [dependencies]
 audan-core = { workspace = true }
 audan-dsp = { workspace = true }
 audan-model = { workspace = true }
+realfft = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
 # Pinned below the workspace's `rten = "0.16"` (rather than `workspace = true`):
 # rten-tensor 0.16 uses associated-type-bound syntax (`Index<'a>: TryFrom<...>`)
 # that is unstable on the workspace's pinned Rust 1.78 toolchain. 0.11.0 is the
-# newest version that still compiles under 1.78; nothing in this crate calls
-# into the rten API yet (see model::OnnxBackend's TODO), so the exact version
-# only needs to compile, not match any particular API surface.
+# newest version that still compiles under 1.78.
 rten = { version = "=0.11.0", optional = true }
+rten-tensor = { version = "=0.11.0", optional = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+tempfile = { workspace = true }

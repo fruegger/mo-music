@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 use audan_cache::Resolver;
 use rayon::prelude::*;
 
+use crate::beats_backend::{self, ResolvedBackend};
 use crate::cli::Cli;
 use crate::config::Resolved;
 use crate::pipeline;
@@ -21,6 +22,7 @@ const AUDIO_EXTENSIONS: &[&str] = &[
 pub fn run(
     files: &[PathBuf],
     click: Option<&Path>,
+    model: Option<&str>,
     cli: &Cli,
     resolved: &Resolved,
 ) -> anyhow::Result<()> {
@@ -31,11 +33,15 @@ pub fn run(
         );
     }
 
+    // Resolved once (not per file): loading a real model is comparatively
+    // expensive, and every file in a batch shares the same backend choice.
+    let backend = beats_backend::resolve(model, cli, resolved)?;
+
     if expanded.len() == 1 {
-        return run_single(&expanded[0], click, cli, resolved);
+        return run_single(&expanded[0], click, cli, resolved, &backend);
     }
 
-    run_batch(&expanded, click, cli, resolved)
+    run_batch(&expanded, click, cli, resolved, &backend)
 }
 
 fn run_single(
@@ -43,8 +49,9 @@ fn run_single(
     click: Option<&Path>,
     cli: &Cli,
     resolved: &Resolved,
+    backend: &ResolvedBackend,
 ) -> anyhow::Result<()> {
-    let grid = compute_beats(file, resolved)?;
+    let grid = compute_beats(file, resolved, backend)?;
 
     if cli.strict {
         let conf = grid.tempo.candidates.top().confidence;
@@ -135,6 +142,7 @@ fn run_batch(
     click: Option<&Path>,
     cli: &Cli,
     resolved: &Resolved,
+    backend: &ResolvedBackend,
 ) -> anyhow::Result<()> {
     let jobs = cli.jobs.unwrap_or_else(rayon::current_num_threads).max(1);
     let pool = rayon::ThreadPoolBuilder::new().num_threads(jobs).build()?;
@@ -143,13 +151,15 @@ fn run_batch(
     // `redb` index handles concurrent access and per-key lock files prevent
     // two workers duplicating the same computation on a duplicate master
     // (audan-cache's own tests already prove concurrent resolution of one
-    // key computes once), so no extra dedup logic belongs here.
+    // key computes once), so no extra dedup logic belongs here. `backend` is
+    // shared read-only across workers -- resolved once in `run` rather than
+    // per file, since loading a real model is comparatively expensive.
     let results: Vec<(PathBuf, anyhow::Result<audan_core::BeatGrid>)> = pool.install(|| {
         files
             .par_iter()
             .map(|path| {
                 eprintln!("audan: analysing {}", path.display());
-                (path.clone(), compute_beats(path, resolved))
+                (path.clone(), compute_beats(path, resolved, backend))
             })
             .collect()
     });
@@ -190,7 +200,11 @@ fn beat_intervals(grid: &audan_core::BeatGrid) -> Vec<audan_format::LabelInterva
         .collect()
 }
 
-fn compute_beats(path: &Path, resolved: &Resolved) -> anyhow::Result<audan_core::BeatGrid> {
+fn compute_beats(
+    path: &Path,
+    resolved: &Resolved,
+    backend: &ResolvedBackend,
+) -> anyhow::Result<audan_core::BeatGrid> {
     let resolver = Resolver::open(&resolved.cache_root)?;
     let (l0_key, signal) = pipeline::resolve_l0(&resolver, path)?;
     let (l1_key, mono) = pipeline::resolve_l1_analysis(&resolver, &l0_key, &signal)?;
@@ -199,7 +213,8 @@ fn compute_beats(path: &Path, resolved: &Resolved) -> anyhow::Result<audan_core:
         &l1_key,
         &mono,
         None,
-        pipeline::expected_beats_frames(),
+        pipeline::expected_beats_frames(backend.as_dyn()),
+        backend.as_dyn(),
     )?;
     Ok(grid)
 }
