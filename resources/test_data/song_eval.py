@@ -99,6 +99,7 @@ class EvalRow:
     song: SongRecord
     value: Any | None  # set on success
     error: str | None  # set on failure instead
+    elapsed: float  # wall time `op` took for this song, seconds
 
 
 def run_eval(
@@ -145,8 +146,25 @@ def run_eval(
         else:
             print(f"FAILED ({elapsed:.1f}s): {error}", file=sys.stderr)
 
-        rows.append(EvalRow(song, value, error))
+        rows.append(EvalRow(song, value, error, elapsed))
     return rows
+
+
+def print_timing(rows: list[EvalRow]) -> None:
+    """Prints average/total wall time to stderr, right after run_eval's own
+    per-song progress lines. Averaged over successful rows only -- a failed
+    row (missing file, no files.txt entry) typically returns near-instantly
+    without ever invoking `op`, and folding those in would understate how
+    long a real analysis actually takes."""
+    ok = [row.elapsed for row in rows if row.error is None]
+    if not ok:
+        return
+    total = sum(ok)
+    print(
+        f"avg {total / len(ok):.1f}s/song over {len(ok)} successful "
+        f"(total {total:.1f}s; {len(rows) - len(ok)} failed, excluded from the average)",
+        file=sys.stderr,
+    )
 
 
 def print_table(columns: list[str], rows: list[EvalRow], to_row: Callable[[SongRecord, Any], list[str]]) -> None:
@@ -382,6 +400,7 @@ def main() -> None:
 
         try:
             rows = run_eval(songs, files, args.library_dir, lambda path: op.run(path, args.exe, cache_dir))
+            print_timing(rows)
             print_table(op.columns, rows, op.to_row)
         finally:
             if cleanup_cache_dir:

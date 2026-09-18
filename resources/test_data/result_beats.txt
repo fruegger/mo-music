@@ -4,14 +4,14 @@ Nr|Song|Tempo_O|Tempo_C|Meter_O|Meter_C
 3|Dance with Somebody|150|150.0|4/4|4/4
 4|In My Place|72|142.6|4/4|6/4
 5|Zombie|84|168.3|4/4|4/4
-6|Back in Black|94|92.7|4/4|6/4
+6|Back in Black|94|92.7|4/4|7/4
 7|You Shook Me All Night Long|127|127.7|4/4|4/4
 8|Paranoid|163|162.0|4/4|4/4
 9|Dance with Somebody|150|150.0|4/4|4/4
 10|Long Train Runnin'|115|117.6|4/4|6/4
 11|Easy|66|122.5|4/4|6/4
 12|Bailando|91|122.1|4/4|6/4
-13|Súbeme la Radio|91|181.4|4/4|6/4
+13|Súbeme la Radio|91|181.4|4/4|7/4
 14|Eres para mí|96|96.8|4/4|6/4
 15|Basket Case|85|87.9|4/4|4/4
 16|Sweet Child O' Mine|125|125.3|4/4|4/4
@@ -24,17 +24,17 @@ Nr|Song|Tempo_O|Tempo_C|Meter_O|Meter_C
 23|Uptown Funk|115|115.1|4/4|4/4
 24|Hysteria|94|92.8|4/4|4/4
 25|Come As You Are|120|120.3|4/4|6/4
-26|No Roots|116|116.4|4/4|4/4
+26|No Roots|116|116.4|4/4|7/4
 27|Price Tag|175|173.3|4/4|4/4
 28|Californication|96|96.3|4/4|4/4
-29|Little Monster|96|64.6|4/4|6/4
+29|Little Monster|96|64.6|4/4|7/4
 30|Sweet Child O' Mine|125|124.5|4/4|6/4
 31|Toxicity|117|123.0|3/4 (mixed)|6/4
 32|Come Together|82|165.6|4/4|6/4
 33|La Grange|160|160.2|4/4|6/4
 34|Baila Morena|120|119.5|4/4|4/4
-35|Could You Be Loved|103|102.8|4/4|4/4
-36|O Samba e o Tango (live)|?|90.4|2/4|6/4
+35|Could You Be Loved|103|102.8|4/4|5/4
+36|O Samba e o Tango (live)|?|90.4|2/4|5/4
 37|I Will Survive|96|190.4|4/4|4/4
 38|Nothing Else Matters|69|136.8|4/4 (some 6/4 bars)|4/4
 39|Take Five|174|129.9|5/4|6/4

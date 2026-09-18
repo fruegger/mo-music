@@ -1,0 +1,83 @@
+[ 1/41] Enter Sandman - Metallica... ok (7.4s)
+[ 2/41] Rolling in the Deep - Adele... ok (4.9s)
+[ 3/41] Dance with Somebody - Mando Diao... ok (6.7s)
+[ 4/41] In My Place - Coldplay... ok (5.0s)
+[ 5/41] Zombie - The Cranberries... ok (6.7s)
+[ 6/41] Back in Black - AC/DC... ok (5.6s)
+[ 7/41] You Shook Me All Night Long - AC/DC... ok (4.6s)
+[ 8/41] Paranoid - Black Sabbath... ok (3.7s)
+[ 9/41] Dance with Somebody - Mando Diao... ok (2.6s)
+[10/41] Long Train Runnin' - The Doobie Brothers... ok (4.7s)
+[11/41] Easy - Faith No More (Commodores cover)... ok (4.1s)
+[12/41] Bailando - Enrique Iglesias ft. Descemer Bueno, Gente de Zona... ok (5.9s)
+[13/41] Súbeme la Radio - Enrique Iglesias ft. Descemer Bueno, Zion & Lennox... ok (4.9s)
+[14/41] Eres para mí - Julieta Venegas ft. Anita Tijoux... ok (4.1s)
+[15/41] Basket Case - Green Day... ok (4.3s)
+[16/41] Sweet Child O' Mine - Guns N' Roses... ok (6.7s)
+[17/41] Entre dos tierras - Héroes del Silencio... ok (8.2s)
+[18/41] I Was Made for Lovin' You - Kiss... ok (5.5s)
+[19/41] Lost on You - LP... ok (6.8s)
+[20/41] Stairway to Heaven - Led Zeppelin... ok (10.7s)
+[21/41] Adiós - Loco Escrito... ok (4.7s)
+[22/41] Mi Culpa - Loco Escrito... ok (5.5s)
+[23/41] Uptown Funk - Mark Ronson ft. Bruno Mars... ok (6.9s)
+[24/41] Hysteria - Muse... ok (5.5s)
+[25/41] Come As You Are - Nirvana... ok (5.5s)
+[26/41] No Roots - Alice Merton... ok (5.7s)
+[27/41] Price Tag - Jessie J ft. B.o.B... ok (5.9s)
+[28/41] Californication - Red Hot Chili Peppers... ok (8.2s)
+[29/41] Little Monster - Royal Blood... ok (5.9s)
+[30/41] Sweet Child O' Mine - Guns N' Roses... ok (8.6s)
+[31/41] Toxicity - System of a Down... ok (5.4s)
+[32/41] Come Together - The Beatles... ok (6.0s)
+[33/41] La Grange - ZZ Top... ok (4.5s)
+[34/41] Baila Morena - Zucchero... ok (5.9s)
+[35/41] Could You Be Loved - Bob Marley & The Wailers... ok (8.1s)
+[36/41] O Samba e o Tango (live) - Caetano Veloso... ok (5.1s)
+[37/41] I Will Survive - Cake... ok (7.6s)
+[38/41] Nothing Else Matters - Metallica... ok (9.5s)
+[39/41] Take Five - The Dave Brubeck Quartet... ok (8.0s)
+[40/41] Tolerate It - Taylor Swift... ok (6.5s)
+[41/41] Crazy - Aerosmith... ok (7.5s)
+Nr|Song|Tempo_O|Tempo_C|Meter_O|Meter_C
+1|Enter Sandman|123|122.3|4/4|4/4
+2|Rolling in the Deep|105|105.0|4/4|7/4
+3|Dance with Somebody|150|150.5|4/4|4/4
+4|In My Place|72|76.9|4/4|7/4
+5|Zombie|84|163.7|4/4|4/4
+6|Back in Black|94|93.5|4/4|7/4
+7|You Shook Me All Night Long|127|126.5|4/4|4/4
+8|Paranoid|163|161.9|4/4|6/4
+9|Dance with Somebody|150|150.5|4/4|4/4
+10|Long Train Runnin'|115|116.6|4/4|7/4
+11|Easy|66|122.0|4/4|4/4
+12|Bailando|91|181.9|4/4|4/4
+13|Súbeme la Radio|91|179.2|4/4|6/4
+14|Eres para mí|96|96.7|4/4|5/4
+15|Basket Case|85|111.1|4/4|6/4
+16|Sweet Child O' Mine|125|127.2|4/4|4/4
+17|Entre dos tierras|166|83.0|4/4|4/4
+18|I Was Made for Lovin' You|129|128.4|4/4|7/4
+19|Lost on You|87|86.4|4/4|6/4
+20|Stairway to Heaven|72-98|141.8|4/4|4/4
+21|Adiós|?|117.5|4/4|6/4
+22|Mi Culpa|94|92.8|4/4|5/4
+23|Uptown Funk|115|115.4|4/4|4/4
+24|Hysteria|94|185.6|4/4|4/4
+25|Come As You Are|120|118.1|4/4|6/4
+26|No Roots|116|116.1|4/4|7/4
+27|Price Tag|175|173.1|4/4|4/4
+28|Californication|96|95.1|4/4|4/4
+29|Little Monster|96|187.3|4/4|4/4
+30|Sweet Child O' Mine|125|125.5|4/4|4/4
+31|Toxicity|117|77.1|3/4 (mixed)|4/4
+32|Come Together|82|162.8|4/4|4/4
+33|La Grange|160|160.2|4/4|6/4
+34|Baila Morena|120|119.9|4/4|4/4
+35|Could You Be Loved|103|102.8|4/4|4/4
+36|O Samba e o Tango (live)|?|89.9|2/4|7/4
+37|I Will Survive|96|185.4|4/4|7/4
+38|Nothing Else Matters|69|140.8|4/4 (some 6/4 bars)|4/4
+39|Take Five|174|100.7|5/4|6/4
+40|Tolerate It|74|75.9|5/4 (often written 10/8)|7/4
+41|Crazy|81|160.5|12/8 (6/8 feel)|6/4
