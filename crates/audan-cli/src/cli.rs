@@ -114,6 +114,24 @@ pub enum Command {
         /// no model, no network, no license prompt (ADR-7).
         #[arg(long)]
         model: Option<String>,
+
+        /// Quick & dirty: analyse only a ~30s window instead of the whole
+        /// track, for a fast approximate estimate. Skips a likely-atypical
+        /// intro, then covers roughly one `beat_this` inference chunk, so
+        /// the analysis step itself costs about the same regardless of
+        /// track length rather than scaling with it -- decode/resample
+        /// still process the whole file first (no seek-based partial decode
+        /// yet), so a cold-cache run's *total* time still scales somewhat
+        /// with track length, just with much less impact than a full
+        /// analysis; a warm L0/L1 cache (e.g. after a prior `probe` or
+        /// `beats` run on the same file) gets closer to true flat cost.
+        /// Costs `downbeats`/bar counts reflecting only that window, not
+        /// the full song, and misses any tempo change outside it. Never
+        /// served from or written to the L3 beats cache (see
+        /// `pipeline::quick_window`'s doc comment for why): this is a
+        /// one-off estimate, not an artefact to persist.
+        #[arg(long)]
+        quick: bool,
     },
 
     /// Estimate musical key, with Camelot / Open Key notation (F3).

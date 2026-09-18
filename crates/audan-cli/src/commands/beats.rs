@@ -23,6 +23,7 @@ pub fn run(
     files: &[PathBuf],
     click: Option<&Path>,
     model: Option<&str>,
+    quick: bool,
     cli: &Cli,
     resolved: &Resolved,
 ) -> anyhow::Result<()> {
@@ -38,20 +39,21 @@ pub fn run(
     let backend = beats_backend::resolve(model, cli, resolved)?;
 
     if expanded.len() == 1 {
-        return run_single(&expanded[0], click, cli, resolved, &backend);
+        return run_single(&expanded[0], click, quick, cli, resolved, &backend);
     }
 
-    run_batch(&expanded, click, cli, resolved, &backend)
+    run_batch(&expanded, click, quick, cli, resolved, &backend)
 }
 
 fn run_single(
     file: &Path,
     click: Option<&Path>,
+    quick: bool,
     cli: &Cli,
     resolved: &Resolved,
     backend: &ResolvedBackend,
 ) -> anyhow::Result<()> {
-    let grid = compute_beats(file, resolved, backend)?;
+    let grid = compute_beats(file, resolved, backend, quick)?;
 
     if cli.strict {
         let conf = grid.tempo.candidates.top().confidence;
@@ -71,14 +73,23 @@ fn run_single(
 
     if cli.quiet {
         println!(
-            "{:.2} {}/4",
-            grid.tempo.median_bpm, grid.meter.beats_per_bar
+            "{:.2} {}/4{}",
+            grid.tempo.median_bpm,
+            grid.meter.beats_per_bar,
+            if quick { " (quick)" } else { "" }
         );
         return Ok(());
     }
 
     match effective_format(cli.format) {
         OutputFormat::Table => {
+            if quick {
+                println!(
+                    "quick:      yes -- analysed {:.0}s window only; downbeats/bar count and \
+                     any tempo change outside it are not reflected",
+                    grid.duration_seconds
+                );
+            }
             println!("duration:   {:.3}s", grid.duration_seconds);
             println!(
                 "tempo:      {:.2} bpm ({:?})",
@@ -140,6 +151,7 @@ fn run_single(
 fn run_batch(
     files: &[PathBuf],
     click: Option<&Path>,
+    quick: bool,
     cli: &Cli,
     resolved: &Resolved,
     backend: &ResolvedBackend,
@@ -159,7 +171,7 @@ fn run_batch(
             .par_iter()
             .map(|path| {
                 eprintln!("audan: analysing {}", path.display());
-                (path.clone(), compute_beats(path, resolved, backend))
+                (path.clone(), compute_beats(path, resolved, backend, quick))
             })
             .collect()
     });
@@ -204,10 +216,23 @@ fn compute_beats(
     path: &Path,
     resolved: &Resolved,
     backend: &ResolvedBackend,
+    quick: bool,
 ) -> anyhow::Result<audan_core::BeatGrid> {
     let resolver = Resolver::open(&resolved.cache_root)?;
     let (l0_key, signal) = pipeline::resolve_l0(&resolver, path)?;
     let (l1_key, mono) = pipeline::resolve_l1_analysis(&resolver, &l0_key, &signal)?;
+
+    if quick {
+        // Bypasses resolve_beats' L3 cache entirely (see
+        // pipeline::quick_window's doc comment for why) -- computed fresh
+        // every time, over a windowed slice of the full mono signal rather
+        // than the whole track.
+        let windowed = pipeline::quick_window(&mono);
+        let mut grid = audan_beats::track_beats(&windowed, backend.as_dyn())?;
+        grid.source.postproc = format!("{}+quick", grid.source.postproc);
+        return Ok(grid);
+    }
+
     let (_beats_key, grid) = pipeline::resolve_beats(
         &resolver,
         &l1_key,

@@ -44,6 +44,54 @@ pub fn hash_file(path: &Path) -> anyhow::Result<String> {
     Ok(blake3::hash(&bytes).to_hex().to_string())
 }
 
+/// How far into the track `--quick` mode's window starts: long enough to
+/// clear most pop/rock intros (rubato, sparse, or otherwise atypical of the
+/// track as a whole -- Enter Sandman's clean-guitar intro is a real example)
+/// without being tuned to any specific song's structure.
+pub const QUICK_SKIP_SECONDS: f64 = 30.0;
+/// How much audio `--quick` mode analyses: chosen to land close to
+/// `audan_beats::chunk::CHUNK_SIZE`'s own ~30s inference-chunk size (that
+/// constant isn't reused directly since it's private to the ONNX frontend
+/// and expressed in frames, not seconds), so quick mode costs about one
+/// `beat_this` inference call rather than the ~10 a full 5-minute track
+/// needs -- an intentional near-flat cost for the *analysis* step
+/// specifically. Decode/resample (L0/L1, still run over the whole file --
+/// see `quick_window`'s doc comment) are not flat-cost this way: on a cold
+/// cache they still scale with track length, same as a full analysis would,
+/// so total wall time only approaches flat once L0/L1 are warm.
+pub const QUICK_WINDOW_SECONDS: f64 = 30.0;
+
+/// Slices `mono` down to `--quick` mode's window
+/// (`[QUICK_SKIP_SECONDS, QUICK_SKIP_SECONDS + QUICK_WINDOW_SECONDS)`,
+/// clamped to the signal's actual length). Falls back to the whole signal
+/// when it's already too short to both skip an intro and still get a full
+/// window out of what's left -- analysing everything is simpler and, for a
+/// short file, not meaningfully slower than windowing it anyway.
+///
+/// Deliberately never touches the cache (unlike every other stage in this
+/// module): a quick-mode `BeatGrid` is a different, lower-quality artefact
+/// computed from a slice of the track, not a cheaper way to produce the
+/// same result a full analysis would -- caching it under the same L3 key a
+/// full run uses would risk a later non-quick request silently getting
+/// served this approximate result instead of the real one. Quick mode is
+/// wired to call `audan_beats::track_beats` directly (see
+/// `commands::beats::run`), bypassing `resolve_beats` entirely.
+pub fn quick_window(mono: &MonoSignal) -> MonoSignal {
+    let sr = mono.sample_rate as f64;
+    let total_secs = mono.samples.len() as f64 / sr;
+
+    if total_secs <= QUICK_SKIP_SECONDS + QUICK_WINDOW_SECONDS {
+        return mono.clone();
+    }
+
+    let start = (QUICK_SKIP_SECONDS * sr).round() as usize;
+    let end = (((QUICK_SKIP_SECONDS + QUICK_WINDOW_SECONDS) * sr).round() as usize).min(mono.samples.len());
+    MonoSignal {
+        sample_rate: mono.sample_rate,
+        samples: mono.samples[start..end].to_vec(),
+    }
+}
+
 #[derive(Serialize)]
 struct L0Params<'a> {
     file_hash: &'a str,
@@ -228,4 +276,43 @@ pub fn resolve_struct(
         Ok(StructureResultDto::from(&result))
     })?;
     Ok(dto)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn signal_of_length(seconds: f64, sample_rate: u32) -> MonoSignal {
+        let n = (seconds * sample_rate as f64).round() as usize;
+        MonoSignal {
+            sample_rate,
+            // Sample value = its own index, so the exact slice `quick_window`
+            // took can be checked by eye rather than just its length.
+            samples: (0..n).map(|i| i as f32).collect(),
+        }
+    }
+
+    #[test]
+    fn windows_a_long_signal_to_the_expected_slice() {
+        let sr = 22_050u32;
+        let mono = signal_of_length(180.0, sr); // 3 minutes: comfortably longer than skip+window
+        let windowed = quick_window(&mono);
+
+        let expected_start = (QUICK_SKIP_SECONDS * sr as f64).round() as usize;
+        let expected_len = (QUICK_WINDOW_SECONDS * sr as f64).round() as usize;
+        assert_eq!(windowed.sample_rate, sr);
+        assert_eq!(windowed.samples.len(), expected_len);
+        assert_eq!(windowed.samples[0], expected_start as f32);
+    }
+
+    #[test]
+    fn leaves_a_short_signal_untouched() {
+        let sr = 22_050u32;
+        // Shorter than QUICK_SKIP_SECONDS + QUICK_WINDOW_SECONDS: nothing
+        // sensible to skip-then-window, so the whole thing should come back.
+        let mono = signal_of_length(10.0, sr);
+        let windowed = quick_window(&mono);
+        assert_eq!(windowed.samples.len(), mono.samples.len());
+        assert_eq!(windowed.samples, mono.samples);
+    }
 }

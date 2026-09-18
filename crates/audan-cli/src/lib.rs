@@ -27,8 +27,8 @@ pub fn run(cli: Cli) -> anyhow::Result<()> {
 
     match &cli.command {
         Command::Probe { file } => commands::probe::run(file, cli.format, cli.quiet),
-        Command::Beats { files, click, model } => {
-            commands::beats::run(files, click.as_deref(), model.as_deref(), &cli, &resolved)
+        Command::Beats { files, click, model, quick } => {
+            commands::beats::run(files, click.as_deref(), model.as_deref(), *quick, &cli, &resolved)
         }
         Command::Key { file } => commands::key::run(file, &cli, &resolved),
         Command::Chords { file, beats } => {

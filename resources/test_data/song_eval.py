@@ -189,12 +189,14 @@ class BeatsResult:
     meter: str
 
 
-def run_beats(path: Path, audan_exe: Path, cache_dir: Path, model: str | None = None) -> BeatsResult:
+def run_beats(path: Path, audan_exe: Path, cache_dir: Path, quick: bool, model: str | None = None) -> BeatsResult:
     """`audan beats`, optionally with `--model <model>`. `model=None` uses
     the always-available onset_fallback backend (no model, no license)."""
     args = ["beats", str(path)]
     if model is not None:
         args += ["--model", model, "--accept-model-license"]
+    if quick:
+        args+=["--quick"]
     data = run_audan(audan_exe, cache_dir, *args)
     return BeatsResult(
         tempo_bpm=data["tempo"]["median_bpm"],
@@ -267,13 +269,25 @@ def build_ops() -> dict[str, OpSpec]:
         "beats": OpSpec(
             description="audan beats (default onset_fallback backend, no model)",
             columns=BEATS_COLUMNS,
-            run=lambda path, exe, cache: run_beats(path, exe, cache, model=None),
+            run=lambda path, exe, cache: run_beats(path, exe, cache, quick=False, model=None),
             to_row=beats_row,
         ),
         "beats-beat-this": OpSpec(
             description="audan beats --model beat_this",
             columns=BEATS_COLUMNS,
-            run=lambda path, exe, cache: run_beats(path, exe, cache, model="beat_this"),
+            run=lambda path, exe, cache: run_beats(path, exe, cache, quick=False, model="beat_this"),
+            to_row=beats_row,
+        ),
+        "beats-quick": OpSpec(
+            description="audan beats (default onset_fallback backend, no model, quick mode)",
+            columns=BEATS_COLUMNS,
+            run=lambda path, exe, cache: run_beats(path, exe, cache, quick=True, model=None),
+            to_row=beats_row,
+        ),
+        "beats-beat-this-quick": OpSpec(
+            description="audan beats --model beat_this, quick mode",
+            columns=BEATS_COLUMNS,
+            run=lambda path, exe, cache: run_beats(path, exe, cache, quick=True, model="beat_this"),
             to_row=beats_row,
         ),
         "key": OpSpec(
