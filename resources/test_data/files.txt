@@ -29,10 +29,13 @@
 28|7528|Red Hot Chili Peppers - Californication [Official Music Video].mp3
 29|5356|Royal Blood - Little Monster (Official Video).mp3
 30|5552|Sweet Child O' Mine.mp3
-31|5240|System Of A Down - Toxicity (Official Video).mp3
-32|6056|The Beatles - Come Together (1).mp3
+31|5240|System Of A Down - Toxicity.mp3
+32|6056|The Beatles - Come Together.mp3
 33|5348|ZZ Top - La Grange.mp3
 34|5836|Zucchero - Baila Morena.mp3
 35|8928|bob_marley_-_could_you_be_loved.mp3
 36|6180|caetano-veloso-o-samba-e-o-tango-hd-alta-calidad-en-directo.mp3
 37|7300|cake_-_i_will_survive.mp3
+38|15201|Metallica - Black Album - Nothing Else Matters.mp3
+39|12770|03 Take Five.mp3
+40|7154|Taylor Swift-Tolerate It.mp3

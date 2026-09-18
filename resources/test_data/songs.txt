@@ -36,3 +36,6 @@
 35|Could You Be Loved|Bob Marley & The Wailers|103|4/4|B:min|B:min,D:maj,G:maj,E:min,F#:min,A:maj
 36|O Samba e o Tango (live)|Caetano Veloso|?|2/4|?|?
 37|I Will Survive|Cake|96|4/4|A:min|A:min,D:min,G:maj,C:maj,F:maj,B:dim,E:maj
+38|Nothing Else Matters|Metallica|69|4/4 (some 6/4 bars)|E:min|E:min,D:maj,C:maj,G:maj,A:min,B:maj
+39|Take Five|The Dave Brubeck Quartet|174|5/4|Eb:min|Eb:min,Bb:min,Gb:maj,B:maj
+40|Tolerate It|Taylor Swift|74|5/4 (often written 10/8)|A:maj|A:maj,E:maj,F#:min,D:maj

@@ -3,3 +3,4 @@
 .audan-cache*/
 *.wav
 !resources/**/*.wav
+__pycache__/
