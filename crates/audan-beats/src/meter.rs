@@ -47,11 +47,16 @@ fn meter_prior(n: u8) -> f64 {
 }
 
 impl MeterEstimator {
-    /// `beat_strengths` is any per-beat activation/confidence sequence
-    /// (e.g. `PostProcessor::detect_beats`'s per-beat confidence, or a
-    /// downbeat-activation curve sampled at beat times): a value expected
-    /// to be periodically stronger every `beats_per_bar`-th beat if the
-    /// meter guess is right.
+    /// `beat_strengths` is any per-beat activation/confidence sequence -- a
+    /// value expected to be periodically stronger every `beats_per_bar`-th
+    /// beat if the meter guess is right. In `track_beats` this is
+    /// `crate::sample_downbeat_curve`'s downbeat-activation curve sampled at
+    /// beat times, not the plain per-beat detection confidence
+    /// (`PostProcessor::detect_beats`'s), which is drawn from the *beat*
+    /// curve: a backend confident about every beat regardless of downbeat
+    /// status (real for a trained tracker; see `lib.rs::track_beats`'s doc
+    /// comment on this) makes that signal nearly flat and useless for
+    /// picking the meter, even though it type-checks the same way.
     pub fn estimate(&self, beat_strengths: &[f32]) -> MeterResult {
         // Falls back to the overwhelmingly common case with zero confidence
         // when there isn't enough data to test any candidate meaningfully

@@ -50,7 +50,7 @@ pub use meter::{MeterEstimator, MeterResult};
 #[cfg(feature = "onnx-beats")]
 pub use model::OnnxBackend;
 pub use model::{BeatActivations, InferenceBackend, OnsetFallbackBackend};
-pub use postprocess::{DetectedBeats, PostProcessor};
+pub use postprocess::{sample_downbeat_curve, DetectedBeats, PostProcessor};
 pub use tempo::{TempoAnalyser, TempoStats};
 
 /// The number of mel bands fed to the backend. S5.3 specifies 128 for exact
@@ -96,15 +96,24 @@ pub fn track_beats(
         .analyse(&detected.times)
         .expect("at least two monotonically increasing beats were just confirmed above");
 
-    let meter_estimator = MeterEstimator::default();
-    let meter_result = meter_estimator.estimate(&detected.confidence);
+    // Sampled once and shared by both stages below: `MeterEstimator` needs it
+    // to choose `beats_per_bar` in the first place, and `snap_downbeats`
+    // needs the identical samples to then choose which phase is the
+    // downbeat. Using `activations.downbeat` here (rather than
+    // `detected.confidence`, which is drawn from `activations.beat`) matters
+    // for a backend with a genuinely discriminative downbeat curve: a
+    // trained tracker's beat-activation strength is often high and roughly
+    // uniform across *every* detected beat (it's confident a beat is a beat,
+    // downbeat or not), which carries almost no signal for picking the
+    // meter -- the downbeat curve is the one built to distinguish them. For
+    // the fallback backend, `downbeat` is identical to `beat` (see
+    // `model.rs`), so this is a no-op there.
+    let downbeat_strengths = sample_downbeat_curve(&detected.times, &activations, grid);
 
-    let downbeats = postproc.snap_downbeats(
-        &detected.times,
-        &activations,
-        meter_result.beats_per_bar,
-        grid,
-    );
+    let meter_estimator = MeterEstimator::default();
+    let meter_result = meter_estimator.estimate(&downbeat_strengths);
+
+    let downbeats = postproc.snap_downbeats(&downbeat_strengths, meter_result.beats_per_bar);
 
     let frames: FramesMeta = grid.into();
 

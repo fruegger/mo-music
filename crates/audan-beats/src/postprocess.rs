@@ -167,50 +167,37 @@ impl PostProcessor {
 
     /// Chooses which detected beats are downbeats by testing every phase
     /// `0..beats_per_bar` and picking the one whose beats land, on average,
-    /// on the strongest `activations.downbeat` energy. For the fallback
-    /// backend, `downbeat` is identical to `beat` (see `model.rs`), so this
-    /// degrades exactly to the documented fallback: "every Nth beat
-    /// starting from the best-scoring phase," using the meter estimate as
-    /// N. A backend with a genuinely discriminative downbeat curve gets a
-    /// real snap for free from the same code.
-    pub fn snap_downbeats(
-        &self,
-        beat_times: &[f64],
-        activations: &BeatActivations,
-        beats_per_bar: u8,
-        grid: FrameGrid,
-    ) -> Vec<BeatIndex> {
+    /// on the strongest downbeat energy -- `downbeat_strengths` (from
+    /// [`sample_downbeat_curve`]), one value per beat in the same order as
+    /// the beat sequence it was sampled against. For the fallback backend,
+    /// `downbeat` is identical to `beat` (see `model.rs`), so this degrades
+    /// exactly to the documented fallback: "every Nth beat starting from the
+    /// best-scoring phase," using the meter estimate as N. A backend with a
+    /// genuinely discriminative downbeat curve gets a real snap for free
+    /// from the same code.
+    ///
+    /// Takes the already-sampled strengths, rather than `activations` and
+    /// `beat_times` directly, so the caller can reuse the exact same samples
+    /// this function's phase test scores against -- which is also what
+    /// [`crate::meter::MeterEstimator::estimate`] should be given (see that
+    /// function's doc comment): asking it to pick `beats_per_bar` from one
+    /// downbeat-strength sequence and then asking this function to pick the
+    /// phase from a *different* sampling of the same curve would let the two
+    /// stages silently disagree about what the curve even looks like.
+    pub fn snap_downbeats(&self, downbeat_strengths: &[f32], beats_per_bar: u8) -> Vec<BeatIndex> {
         let n = beats_per_bar as usize;
-        if beat_times.is_empty() || n == 0 {
+        if downbeat_strengths.is_empty() || n == 0 {
             return Vec::new();
         }
-
-        // `activations.times` are evenly spaced (`MelFrontend` always uses a
-        // padded grid, where `FrameGrid::time_of(k) == k*hop/sr` exactly), so
-        // the nearest frame index can be computed directly in O(1) rather
-        // than by scanning every activation frame for every beat -- with a
-        // beat count and activation-frame count that both scale with track
-        // length, the earlier linear scan made this whole function
-        // effectively O(beats_per_bar * n_beats * n_frames).
-        let sr = grid.sample_rate as f64;
-        let hop = grid.hop as f64;
-        let last_idx = activations.downbeat.len().saturating_sub(1);
-        let sample_at = |t: f64| -> f32 {
-            if activations.downbeat.is_empty() {
-                return 0.0;
-            }
-            let idx = ((t * sr / hop).round() as i64).clamp(0, last_idx as i64) as usize;
-            activations.downbeat[idx]
-        };
 
         let mut best_phase = 0usize;
         let mut best_score = f32::MIN;
         for phase in 0..n {
-            let score: f32 = beat_times
+            let score: f32 = downbeat_strengths
                 .iter()
                 .enumerate()
                 .filter(|(i, _)| i % n == phase)
-                .map(|(_, &t)| sample_at(t))
+                .map(|(_, &v)| v)
                 .sum();
             if score > best_score {
                 best_score = score;
@@ -218,10 +205,41 @@ impl PostProcessor {
             }
         }
 
-        (0..beat_times.len())
+        (0..downbeat_strengths.len())
             .filter(|i| i % n == best_phase)
             .collect()
     }
+}
+
+/// Samples `activations.downbeat` at each of `beat_times`, one value per
+/// beat, for feeding both [`crate::meter::MeterEstimator::estimate`] (to
+/// pick `beats_per_bar` itself) and [`PostProcessor::snap_downbeats`] (to
+/// pick which phase is the downbeat, given that count) -- computed once so
+/// both stages score the same samples rather than each re-deriving its own
+/// (see `snap_downbeats`'s doc comment for why that matters).
+///
+/// `activations.times` are evenly spaced (`MelFrontend`/`OnnxFrontend` always
+/// use a padded grid, where `FrameGrid::time_of(k) == k*hop/sr` exactly), so
+/// the nearest frame index can be computed directly in O(1) per beat rather
+/// than by scanning every activation frame for every beat.
+pub fn sample_downbeat_curve(
+    beat_times: &[f64],
+    activations: &BeatActivations,
+    grid: FrameGrid,
+) -> Vec<f32> {
+    if activations.downbeat.is_empty() {
+        return vec![0.0; beat_times.len()];
+    }
+    let sr = grid.sample_rate as f64;
+    let hop = grid.hop as f64;
+    let last_idx = activations.downbeat.len() - 1;
+    beat_times
+        .iter()
+        .map(|&t| {
+            let idx = ((t * sr / hop).round() as i64).clamp(0, last_idx as i64) as usize;
+            activations.downbeat[idx]
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -344,7 +362,34 @@ mod tests {
         };
 
         let pp = PostProcessor::default();
-        let downbeats = pp.snap_downbeats(&beat_times, &activations, 4, grid);
+        let strengths = sample_downbeat_curve(&beat_times, &activations, grid);
+        let downbeats = pp.snap_downbeats(&strengths, 4);
         assert_eq!(downbeats, vec![0, 4]);
+    }
+
+    #[test]
+    fn sample_downbeat_curve_matches_snap_downbeats_at_the_same_beat_times() {
+        // The two stages that consume the downbeat curve
+        // (`MeterEstimator::estimate` and `snap_downbeats`) must see
+        // identical samples -- this pins `sample_downbeat_curve` as the
+        // single source of those samples for both.
+        let grid = FrameGrid::new(22_050, 256, 512, PadMode::Reflect);
+        let beat_times: Vec<f64> = (0..8).map(|i| i as f64 * 0.5).collect();
+        let mut downbeat = vec![0.1f32; 200];
+        downbeat[0] = 1.0; // beat 0
+        downbeat[172] = 0.9; // beat 4 (4*0.5s * 22050/256 ~= 172.3 frames)
+        let times: Vec<FrameTime> = (0..downbeat.len()).map(|k| grid.time_of(k)).collect();
+        let activations = BeatActivations {
+            times,
+            beat: downbeat.clone(),
+            downbeat,
+            grid,
+        };
+
+        let strengths = sample_downbeat_curve(&beat_times, &activations, grid);
+        assert_eq!(strengths.len(), beat_times.len());
+        assert!(strengths[0] > 0.5, "beat 0 should sample the strong frame");
+        assert!(strengths[4] > 0.5, "beat 4 should sample the strong frame");
+        assert!(strengths[1] < 0.5 && strengths[2] < 0.5 && strengths[3] < 0.5);
     }
 }
