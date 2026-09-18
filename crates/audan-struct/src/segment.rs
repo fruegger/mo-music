@@ -181,8 +181,10 @@ mod tests {
 
     fn beat_grid(beat_times: Vec<f64>) -> BeatGrid {
         let n = beat_times.len();
+        let duration_seconds = beat_times.last().copied().unwrap_or(0.0) + 1.0;
         BeatGrid {
             schema_version: BeatGrid::CURRENT_SCHEMA_VERSION,
+            duration_seconds,
             beats: beat_times,
             downbeats: vec![0],
             meter: Meter {

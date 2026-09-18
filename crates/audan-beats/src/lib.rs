@@ -119,6 +119,7 @@ pub fn track_beats(
 
     Ok(BeatGrid {
         schema_version: BeatGrid::CURRENT_SCHEMA_VERSION,
+        duration_seconds: signal.duration_seconds(),
         beats: detected.times,
         downbeats,
         meter: Meter {

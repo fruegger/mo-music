@@ -71,6 +71,15 @@ pub struct Source {
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub struct BeatGrid {
     pub schema_version: u32,
+    /// Duration of the analysed audio, in seconds -- from the analysis
+    /// signal's own sample count (`samples.len() / sample_rate`), not
+    /// derived from `beats` (whose last entry is wherever the last detected
+    /// beat happens to land, not the track's actual end). `#[serde(default)]`
+    /// so a hand-corrected `--beats grid.json` (RV5) exported before this
+    /// field existed still deserializes, defaulting to `0.0` rather than
+    /// failing to load.
+    #[serde(default)]
+    pub duration_seconds: f64,
     /// Beat times in original-signal seconds (window-centre convention; these
     /// are pre-flattened from `FrameTime` for the public schema).
     pub beats: Vec<f64>,
@@ -108,6 +117,7 @@ mod tests {
     fn sample_grid() -> BeatGrid {
         BeatGrid {
             schema_version: BeatGrid::CURRENT_SCHEMA_VERSION,
+            duration_seconds: 1.9,
             beats: vec![0.512, 0.973, 1.441],
             downbeats: vec![0],
             meter: Meter {

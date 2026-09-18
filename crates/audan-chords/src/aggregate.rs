@@ -61,8 +61,10 @@ mod tests {
     use audan_core::frame::{FrameGrid, PadMode};
 
     fn grid(beats: Vec<f64>) -> BeatGrid {
+        let duration_seconds = beats.last().copied().unwrap_or(0.0) + 1.0;
         BeatGrid {
             schema_version: BeatGrid::CURRENT_SCHEMA_VERSION,
+            duration_seconds,
             confidence: vec![1.0; beats.len()],
             beats,
             downbeats: vec![0],

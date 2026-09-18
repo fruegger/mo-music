@@ -114,10 +114,9 @@ pub fn run(
                 namespace: "chord".into(),
                 data,
             };
-            let duration = grid.beats.last().copied().unwrap_or(0.0);
             println!(
                 "{}",
-                serde_json::to_string_pretty(&audan_format::write_jams(&[ann], duration))?
+                serde_json::to_string_pretty(&audan_format::write_jams(&[ann], grid.duration_seconds))?
             );
         }
         _ => print_json(&seq)?,

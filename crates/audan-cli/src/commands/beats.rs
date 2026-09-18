@@ -79,6 +79,7 @@ fn run_single(
 
     match effective_format(cli.format) {
         OutputFormat::Table => {
+            println!("duration:   {:.3}s", grid.duration_seconds);
             println!(
                 "tempo:      {:.2} bpm ({:?})",
                 grid.tempo.median_bpm, grid.tempo.stability.class
@@ -110,10 +111,9 @@ fn run_single(
                 namespace: "beat".into(),
                 data,
             };
-            let duration = grid.beats.last().copied().unwrap_or(0.0);
             println!(
                 "{}",
-                serde_json::to_string_pretty(&audan_format::write_jams(&[ann], duration))?
+                serde_json::to_string_pretty(&audan_format::write_jams(&[ann], grid.duration_seconds))?
             );
         }
         OutputFormat::Lab => print!("{}", audan_format::write_lab(&beat_intervals(&grid))),

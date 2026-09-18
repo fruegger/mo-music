@@ -188,8 +188,10 @@ mod tests {
 
     fn beat_grid(beats: Vec<f64>) -> BeatGrid {
         let n = beats.len();
+        let duration_seconds = beats.last().copied().unwrap_or(0.0) + 1.0;
         BeatGrid {
             schema_version: BeatGrid::CURRENT_SCHEMA_VERSION,
+            duration_seconds,
             confidence: vec![1.0; n],
             beats,
             downbeats: vec![0],
