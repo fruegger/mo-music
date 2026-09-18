@@ -1,0 +1,38 @@
+#|Size(KB)|File
+1|5180|01 Enter Sandman.mp3
+2|3564|01 Rolling In the Deep.mp3
+3|4968|02 Dance With Somebody.mp3
+4|3572|02 In My Place.mp3
+5|4792|03 Zombie.mp3
+6|4004|06 Back In Black.mp3
+7|3288|07 You Shook Me All Night Long.mp3
+8|4108|Black Sabbath - Paranoid (HQ).mp3
+9|4968|Dance With Somebody.mp3
+10|6568|Doobie Brothers-Long Train Running (1).mp3
+11|2944|Easy.mp3
+12|6728|Enrique Iglesias - Bailando ft. Descemer Bueno, Gente De Zona (Español).mp3
+13|5456|Enrique Iglesias - SUBEME LA RADIO (Official Video) ft. Descemer Bueno, Zion & Lennox.mp3
+14|3012|Eres para Mi.mp3
+15|4516|Green Day - Basket Case [Official Music Video].mp3
+16|7012|Guns N' Roses - Sweet Child O' Mine (Official Music Video).mp3
+17|8656|Héroes del Silencio - Entre dos tierras (videoclip oficial).mp3
+18|5960|Kiss - I Was Made For Lovin' You (Version Original 1979) (Producciones Especiales JoseDJ Mix).mp3
+19|7228|LP - Lost On You [Live Session].mp3
+20|11264|Led Zeppelin -Stairway To Heaven ᴴᴰ (LegendadoTradução PTBR).mp3
+21|5140|Loco Escrito - Adiós.mp3
+22|5208|Loco Escrito - Mi Culpa.mp3
+23|6340|Mark Ronson - Uptown Funk (Official Video) ft. Bruno Mars.mp3
+24|5316|Muse - Hysteria [Official Music Video].mp3
+25|5292|Nirvana - Come As You Are.mp3
+26|3684|No Roots.mp3
+27|3460|Price Tag (feat. B.o.B).mp3
+28|7528|Red Hot Chili Peppers - Californication [Official Music Video].mp3
+29|5356|Royal Blood - Little Monster (Official Video).mp3
+30|5552|Sweet Child O' Mine.mp3
+31|5240|System Of A Down - Toxicity (Official Video).mp3
+32|6056|The Beatles - Come Together (1).mp3
+33|5348|ZZ Top - La Grange.mp3
+34|5836|Zucchero - Baila Morena.mp3
+35|8928|bob_marley_-_could_you_be_loved.mp3
+36|6180|caetano-veloso-o-samba-e-o-tango-hd-alta-calidad-en-directo.mp3
+37|7300|cake_-_i_will_survive.mp3

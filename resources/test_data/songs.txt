@@ -1,0 +1,38 @@
+#|Song|Artist|Tempo|Meter|Key|Chords
+1|Enter Sandman|Metallica|123|4/4|E:min|E:min,F#:maj,G:maj,A:maj,C:maj,B:maj
+2|Rolling in the Deep|Adele|105|4/4|C:min|C:min,G:min,Bb:maj,Ab:maj
+3|Dance with Somebody|Mando Diao|150|4/4|C#:min|?
+4|In My Place|Coldplay|72|4/4|A:maj|A:maj,B:min,D:maj
+5|Zombie|The Cranberries|84|4/4|E:min|E:min,C:maj,G:maj,D:maj
+6|Back in Black|AC/DC|94|4/4|E:maj|E:maj,D:maj,A:maj,B:maj
+7|You Shook Me All Night Long|AC/DC|127|4/4|G:maj|G:maj,C:maj,D:maj
+8|Paranoid|Black Sabbath|163|4/4|E:min|E:min,D:maj,G:maj,C:maj
+9|Dance with Somebody|Mando Diao|150|4/4|C#:min|?
+10|Long Train Runnin'|The Doobie Brothers|115|4/4|G:min|?
+11|Easy|Faith No More (Commodores cover)|66|4/4|Ab:maj|Ab:maj,G:min,C:min,F:min,Db:maj,Eb:maj
+12|Bailando|Enrique Iglesias ft. Descemer Bueno, Gente de Zona|91|4/4|E:min|E:min,C:maj,G:maj,D:maj
+13|Súbeme la Radio|Enrique Iglesias ft. Descemer Bueno, Zion & Lennox|91|4/4|A:min|?
+14|Eres para mí|Julieta Venegas ft. Anita Tijoux|96|4/4|B:min|B:min,D:maj,E:maj,A:maj,G:maj
+15|Basket Case|Green Day|85|4/4|Eb:maj|Eb:maj,Bb:maj,C:min,G:min,Ab:maj
+16|Sweet Child O' Mine|Guns N' Roses|125|4/4|Db:maj|Db:maj,B:maj,Gb:maj,Ab:maj,Eb:min
+17|Entre dos tierras|Héroes del Silencio|166|4/4|B:min|?
+18|I Was Made for Lovin' You|Kiss|129|4/4|E:min|E:min,G:maj,D:maj,C:maj,A:min
+19|Lost on You|LP|87|4/4|F:min|Bb:min,Eb:maj,F:min,Db:maj,Ab:maj
+20|Stairway to Heaven|Led Zeppelin|72-98|4/4|A:min|A:min,C:maj,D:maj,F:maj,G:maj,E:min
+21|Adiós|Loco Escrito|?|4/4|A:min|A:min,F:maj,C:maj,G:maj
+22|Mi Culpa|Loco Escrito|94|4/4|F#:min|?
+23|Uptown Funk|Mark Ronson ft. Bruno Mars|115|4/4|D:min|D:min,G:maj
+24|Hysteria|Muse|94|4/4|A:min|?
+25|Come As You Are|Nirvana|120|4/4|E:min|E:min,D:maj,G:maj,C:maj,A:maj
+26|No Roots|Alice Merton|116|4/4|B:min|B:min,E:min,G:maj,A:maj
+27|Price Tag|Jessie J ft. B.o.B|175|4/4|F:maj|F:maj,A:min,D:min,Bb:maj
+28|Californication|Red Hot Chili Peppers|96|4/4|A:min|A:min,F:maj,C:maj,G:maj,D:min
+29|Little Monster|Royal Blood|96|4/4|C:min|C:min,Ab:maj,F:min,Eb:maj
+30|Sweet Child O' Mine|Guns N' Roses|125|4/4|Db:maj|Db:maj,B:maj,Gb:maj,Ab:maj,Eb:min
+31|Toxicity|System of a Down|117|3/4 (mixed)|C:min|?
+32|Come Together|The Beatles|82|4/4|D:min|D:min,A:maj,G:maj,B:min
+33|La Grange|ZZ Top|160|4/4|A:maj|A:maj,D:maj,C:maj,F#:min,A:min,F:maj,F#:min,A:min,D:maj
+34|Baila Morena|Zucchero|120|4/4|G:min|G:min,C:maj,C:min,F:maj,Eb:maj,Bb:maj,D:maj
+35|Could You Be Loved|Bob Marley & The Wailers|103|4/4|B:min|B:min,D:maj,G:maj,E:min,F#:min,A:maj
+36|O Samba e o Tango (live)|Caetano Veloso|?|2/4|?|?
+37|I Will Survive|Cake|96|4/4|A:min|A:min,D:min,G:maj,C:maj,F:maj,B:dim,E:maj
