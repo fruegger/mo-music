@@ -1,0 +1,42 @@
+Nr|Song|Tempo_O|Tempo_C|Meter_O|Meter_C
+1|Enter Sandman|123|123.8|4/4|4/4
+2|Rolling in the Deep|105|105.0|4/4|4/4
+3|Dance with Somebody|150|150.0|4/4|4/4
+4|In My Place|72|72.4|4/4|4/4
+5|Zombie|84|83.5|4/4|4/4
+6|Back in Black|94|93.5|4/4|4/4
+7|You Shook Me All Night Long|127|128.5|4/4|4/4
+8|Paranoid|163|162.9|4/4|4/4
+9|Dance with Somebody|150|150.0|4/4|4/4
+10|Long Train Runnin'|115|118.0|4/4|4/4
+11|Easy|66|124.7|4/4|4/4
+12|Bailando|91|90.9|4/4|4/4
+13|Súbeme la Radio|91|90.9|4/4|4/4
+14|Eres para mí|96|96.9|4/4|4/4
+15|Basket Case|85|174.9|4/4|4/4
+16|Sweet Child O' Mine|125|125.5|4/4|4/4
+17|Entre dos tierras|166|166.2|4/4|4/4
+18|I Was Made for Lovin' You|129|128.5|4/4|4/4
+19|Lost on You|87|88.0|4/4|4/4
+20|Stairway to Heaven|72-98|83.7|4/4|4/4
+21|Adiós|?|88.9|4/4|4/4
+22|Mi Culpa|94|93.8|4/4|4/4
+23|Uptown Funk|115|115.3|4/4|4/4
+24|Hysteria|94|93.3|4/4|4/4
+25|Come As You Are|120|120.6|4/4|4/4
+26|No Roots|116|115.9|4/4|4/4
+27|Price Tag|175|87.5|4/4|4/4
+28|Californication|96|96.8|4/4|4/4
+29|Little Monster|96|96.0|4/4|4/4
+30|Sweet Child O' Mine|125|125.2|4/4|4/4
+31|Toxicity|117|78.8|3/4 (mixed)|4/4
+32|Come Together|82|83.4|4/4|4/4
+33|La Grange|160|161.6|4/4|4/4
+34|Baila Morena|120|120.0|4/4|4/4
+35|Could You Be Loved|103|102.6|4/4|4/4
+36|O Samba e o Tango (live)|?|91.3|2/4|4/4
+37|I Will Survive|96|96.4|4/4|4/4
+38|Nothing Else Matters|69|142.6|4/4 (some 6/4 bars)|3/4
+39|Take Five|174|85.6|5/4|4/4
+40|Tolerate It|74|149.7|5/4 (often written 10/8)|4/4
+41|Crazy|81|162.3|12/8 (6/8 feel)|6/4

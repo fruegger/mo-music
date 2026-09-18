@@ -307,10 +307,13 @@ def choose_op(ops: dict[str, OpSpec], requested: str | None) -> str:
 
     keys = list(ops)
     print("Choose an operation to run:", file=sys.stderr)
+    print(f"  0. exit", file=sys.stderr)
     for i, k in enumerate(keys, start=1):
         print(f"  {i}. {k} -- {ops[k].description}", file=sys.stderr)
     while True:
-        choice = input(f"[1-{len(keys)}]: ").strip()
+        choice = input(f"[0-{len(keys)}]: ").strip()
+        if int(choice) == 0:
+            return "exit"
         if choice.isdigit() and 1 <= int(choice) <= len(keys):
             return keys[int(choice) - 1]
         print("invalid choice, try again", file=sys.stderr)
@@ -350,23 +353,25 @@ def main() -> None:
     if not args.exe.exists():
         sys.exit(f"audan binary not found at {args.exe} -- build it first: cargo build --release -p audan-cli")
 
-    op = ops[choose_op(ops, args.op)]
+    choice = choose_op(ops, args.op)
 
-    songs = load_songs()
-    files = load_files()
+    if choice!="exit":
+        op = ops[choice]
+        songs = load_songs()
+        files = load_files()
 
-    cache_dir = args.cache_dir
-    cleanup_cache_dir = False
-    if cache_dir is None:
-        cache_dir = Path(tempfile.mkdtemp(prefix="audan-song-eval-"))
-        cleanup_cache_dir = True
+        cache_dir = args.cache_dir
+        cleanup_cache_dir = False
+        if cache_dir is None:
+            cache_dir = Path(tempfile.mkdtemp(prefix="audan-song-eval-"))
+            cleanup_cache_dir = True
 
-    try:
-        rows = run_eval(songs, files, args.library_dir, lambda path: op.run(path, args.exe, cache_dir))
-        print_table(op.columns, rows, op.to_row)
-    finally:
-        if cleanup_cache_dir:
-            shutil.rmtree(cache_dir, ignore_errors=True)
+        try:
+            rows = run_eval(songs, files, args.library_dir, lambda path: op.run(path, args.exe, cache_dir))
+            print_table(op.columns, rows, op.to_row)
+        finally:
+            if cleanup_cache_dir:
+                shutil.rmtree(cache_dir, ignore_errors=True)
 
 
 if __name__ == "__main__":
