@@ -4,18 +4,23 @@
 Runs a real `audan` operation over every song in songs.txt (joined against
 files.txt by `#`, both simple `|`-delimited tables in this directory) and
 prints a table comparing the hand-curated original values against what the
-already-built `audan` CLI actually measures. Replaces the earlier Rust
-integration test (crates/audan-cli/tests/song_eval.rs) with a script that
-just shells out to the compiled binary -- same per-song cost (dominated by
-decode + model inference, not process start-up), but no cargo/rustc needed
-to run it, and repeat runs get faster once audan's own L0/L1/L3 cache is
-warm.
+already-built `audan` CLI actually measures. Shells out to the compiled
+binary rather than linking against the Rust crates directly -- same
+per-song cost (dominated by decode + analysis, not process start-up), but
+no cargo/rustc needed to run it, and repeat runs get faster once audan's
+own L0/L1/L3 cache is warm.
+
+Several operations are available (see OPS below -- beats with the default
+fallback backend, beats with beat_this, key, chords), each with its own
+table columns since what's being compared differs (tempo/meter vs. key vs.
+chord vocabulary). Pick one with --op, or leave it out to choose from a
+menu.
 
 Requires a built `audan` binary:
     cargo build --release -p audan-cli
 
 Usage:
-    python song_eval.py --library-dir "C:\\...\\repertoire"
+    python song_eval.py --library-dir "C:\\...\\repertoire" [--op beats-beat-this]
 
 Caching note: by default this uses a fresh, throwaway cache directory per
 run, so results always reflect the current `audan` build rather than a
@@ -37,12 +42,10 @@ import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, TypeVar
+from typing import Any, Callable
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 TEST_DATA_DIR = Path(__file__).resolve().parent
-
-T = TypeVar("T")
 
 # ---------------------------------------------------------------------------
 # generic: load songs.txt/files.txt, run an op against each file, print a
@@ -94,7 +97,7 @@ def load_files() -> dict[int, str]:
 @dataclass
 class EvalRow:
     song: SongRecord
-    value: object | None  # T on success
+    value: Any | None  # set on success
     error: str | None  # set on failure instead
 
 
@@ -102,7 +105,7 @@ def run_eval(
     songs: list[SongRecord],
     files: dict[int, str],
     library_dir: Path,
-    op: Callable[[Path], T],
+    op: Callable[[Path], Any],
 ) -> list[EvalRow]:
     """Runs `op` against every song that has a matching, existing file under
     `library_dir`, pairing each song with `op`'s result (or an error --
@@ -121,7 +124,7 @@ def run_eval(
         print(f"[{i:2d}/{total}] {song.title} - {song.artist}... ", end="", file=sys.stderr, flush=True)
         start = time.monotonic()
 
-        value: T | None = None
+        value: Any | None = None
         error: str | None = None
         filename = files.get(song.nr)
         if filename is None:
@@ -146,7 +149,7 @@ def run_eval(
     return rows
 
 
-def print_table(columns: list[str], rows: list[EvalRow], to_row: Callable[[SongRecord, T], list[str]]) -> None:
+def print_table(columns: list[str], rows: list[EvalRow], to_row: Callable[[SongRecord, Any], list[str]]) -> None:
     """Prints a `|`-delimited table: `columns` as the header, then one row
     per song via `to_row` on success, or `Nr|Song|ERROR: ...` on failure."""
     print("|".join(columns))
@@ -161,8 +164,22 @@ def print_table(columns: list[str], rows: list[EvalRow], to_row: Callable[[SongR
         print(f"{failures} of {len(rows)} songs failed (see ERROR rows above)", file=sys.stderr)
 
 
+def run_audan(audan_exe: Path, cache_dir: Path, *args: str) -> dict[str, Any] | list[Any]:
+    """Runs `audan <args...> --format json --cache-dir <cache_dir>` and
+    parses the JSON it prints -- the one place every op below actually
+    shells out, so a change to how audan is invoked (a new global flag,
+    error-message parsing) only needs to happen here."""
+    cmd = [str(audan_exe), *args, "--format", "json", "--cache-dir", str(cache_dir)]
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+    if result.returncode != 0:
+        raise RuntimeError(f"audan exited {result.returncode}: {result.stderr.strip()[:200]}")
+    return json.loads(result.stdout)
+
+
 # ---------------------------------------------------------------------------
-# specific example: `audan beats <file> --model beat_this`
+# ops: each is a (run, columns, to_row) triple registered in OPS below.
+# `run` always has the signature (path, audan_exe, cache_dir) -> result;
+# `to_row` turns (song, result) into the row cells named by `columns`.
 # ---------------------------------------------------------------------------
 
 
@@ -172,39 +189,148 @@ class BeatsResult:
     meter: str
 
 
-def run_beats_beat_this(path: Path, audan_exe: Path, cache_dir: Path) -> BeatsResult:
-    """Shells out to the real `audan beats ... --model beat_this` and parses
-    its JSON output -- exactly what a user would get running the CLI by
-    hand, not a re-implementation of it."""
-    cmd = [
-        str(audan_exe),
-        "beats",
-        str(path),
-        "--model",
-        "beat_this",
-        "--accept-model-license",
-        "--format",
-        "json",
-        "--cache-dir",
-        str(cache_dir),
-    ]
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
-    if result.returncode != 0:
-        raise RuntimeError(f"audan exited {result.returncode}: {result.stderr.strip()[:200]}")
-    data = json.loads(result.stdout)
+def run_beats(path: Path, audan_exe: Path, cache_dir: Path, model: str | None = None) -> BeatsResult:
+    """`audan beats`, optionally with `--model <model>`. `model=None` uses
+    the always-available onset_fallback backend (no model, no license)."""
+    args = ["beats", str(path)]
+    if model is not None:
+        args += ["--model", model, "--accept-model-license"]
+    data = run_audan(audan_exe, cache_dir, *args)
     return BeatsResult(
         tempo_bpm=data["tempo"]["median_bpm"],
         meter=f"{data['meter']['beats_per_bar']}/4",
     )
 
 
+def beats_row(song: SongRecord, r: BeatsResult) -> list[str]:
+    return [str(song.nr), song.title, song.tempo, f"{r.tempo_bpm:.1f}", song.meter, r.meter]
+
+
+BEATS_COLUMNS = ["Nr", "Song", "Tempo_O", "Tempo_C", "Meter_O", "Meter_C"]
+
+
+@dataclass
+class KeyResult:
+    name: str  # e.g. "F# minor", straight from audan's own KeyEstimate.name
+    short: str  # e.g. "F#:min", matching songs.txt's Key column convention
+    confidence: float
+
+
+def run_key(path: Path, audan_exe: Path, cache_dir: Path) -> KeyResult:
+    data = run_audan(audan_exe, cache_dir, "key", str(path))  # [{"value": {"name": ...}, "confidence": ...}, ...]
+    top = data[0]
+    name = top["value"]["name"]
+    tonic, _, mode_word = name.rpartition(" ")
+    short = f"{tonic}:{'maj' if mode_word == 'major' else 'min'}"
+    return KeyResult(name=name, short=short, confidence=top["confidence"])
+
+
+def key_row(song: SongRecord, r: KeyResult) -> list[str]:
+    return [str(song.nr), song.title, song.key, r.short, f"{r.confidence:.2f}"]
+
+
+KEY_COLUMNS = ["Nr", "Song", "Key_O", "Key_C", "Confidence"]
+
+
+@dataclass
+class ChordsResult:
+    vocabulary: str  # distinct chords, in first-occurrence order, Harte notation
+    n_events: int
+
+
+def run_chords(path: Path, audan_exe: Path, cache_dir: Path) -> ChordsResult:
+    data = run_audan(audan_exe, cache_dir, "chords", str(path))  # {"chords": [{"chord": "E:min", ...}, ...], ...}
+    seen: list[str] = []
+    for event in data["chords"]:
+        if event["chord"] not in seen:
+            seen.append(event["chord"])
+    return ChordsResult(vocabulary=",".join(seen), n_events=len(data["chords"]))
+
+
+def chords_row(song: SongRecord, r: ChordsResult) -> list[str]:
+    return [str(song.nr), song.title, song.chords, r.vocabulary]
+
+
+CHORDS_COLUMNS = ["Nr", "Song", "Chords_O", "Chords_C"]
+
+
+@dataclass
+class OpSpec:
+    description: str
+    columns: list[str]
+    run: Callable[[Path, Path, Path], Any]
+    to_row: Callable[[SongRecord, Any], list[str]]
+
+
+def build_ops() -> dict[str, OpSpec]:
+    return {
+        "beats": OpSpec(
+            description="audan beats (default onset_fallback backend, no model)",
+            columns=BEATS_COLUMNS,
+            run=lambda path, exe, cache: run_beats(path, exe, cache, model=None),
+            to_row=beats_row,
+        ),
+        "beats-beat-this": OpSpec(
+            description="audan beats --model beat_this",
+            columns=BEATS_COLUMNS,
+            run=lambda path, exe, cache: run_beats(path, exe, cache, model="beat_this"),
+            to_row=beats_row,
+        ),
+        "key": OpSpec(
+            description="audan key",
+            columns=KEY_COLUMNS,
+            run=run_key,
+            to_row=key_row,
+        ),
+        "chords": OpSpec(
+            description="audan chords (distinct chord vocabulary used, deduped in order)",
+            columns=CHORDS_COLUMNS,
+            run=run_chords,
+            to_row=chords_row,
+        ),
+    }
+
+
+def choose_op(ops: dict[str, OpSpec], requested: str | None) -> str:
+    """Returns the chosen op's key: `requested` if given (validated against
+    `ops`), otherwise an interactive numbered menu on stderr (stdout stays
+    clean for the table itself). Refuses to guess when stdin isn't a TTY --
+    a script piping this in without --op almost certainly wants a clear
+    error, not a menu prompt it can't answer."""
+    if requested is not None:
+        if requested not in ops:
+            sys.exit(f"unknown --op {requested!r}; choices: {', '.join(ops)}")
+        return requested
+
+    if not sys.stdin.isatty():
+        sys.exit(f"no --op given and stdin is not a TTY; pass one of: {', '.join(ops)}")
+
+    keys = list(ops)
+    print("Choose an operation to run:", file=sys.stderr)
+    for i, k in enumerate(keys, start=1):
+        print(f"  {i}. {k} -- {ops[k].description}", file=sys.stderr)
+    while True:
+        choice = input(f"[1-{len(keys)}]: ").strip()
+        if choice.isdigit() and 1 <= int(choice) <= len(keys):
+            return keys[int(choice) - 1]
+        print("invalid choice, try again", file=sys.stderr)
+
+
 def main() -> None:
+    ops = build_ops()
+
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument(
         "--library-dir",
         required=True,
         type=Path,
         help="folder containing the audio files named in files.txt",
+    )
+    parser.add_argument(
+        "--op",
+        choices=sorted(ops),
+        default=None,
+        help="which audan operation to run; omit to choose from a menu",
     )
     parser.add_argument(
         "--exe",
@@ -224,6 +350,8 @@ def main() -> None:
     if not args.exe.exists():
         sys.exit(f"audan binary not found at {args.exe} -- build it first: cargo build --release -p audan-cli")
 
+    op = ops[choose_op(ops, args.op)]
+
     songs = load_songs()
     files = load_files()
 
@@ -234,25 +362,8 @@ def main() -> None:
         cleanup_cache_dir = True
 
     try:
-        rows = run_eval(
-            songs,
-            files,
-            args.library_dir,
-            lambda path: run_beats_beat_this(path, args.exe, cache_dir),
-        )
-
-        print_table(
-            ["Nr", "Song", "Tempo_O", "Tempo_C", "Meter_O", "Meter_C"],
-            rows,
-            lambda song, r: [
-                str(song.nr),
-                song.title,
-                song.tempo,
-                f"{r.tempo_bpm:.1f}",
-                song.meter,
-                r.meter,
-            ],
-        )
+        rows = run_eval(songs, files, args.library_dir, lambda path: op.run(path, args.exe, cache_dir))
+        print_table(op.columns, rows, op.to_row)
     finally:
         if cleanup_cache_dir:
             shutil.rmtree(cache_dir, ignore_errors=True)
