@@ -12,6 +12,18 @@
 //! explained by a 3-beat grouping sampled at half the rate -- confirmed
 //! directly in this module's own tests), so some outside signal is needed to
 //! prefer one over the other when the raw scores don't clearly decide it.
+//!
+//! `beats_per_bar` is purely a periodicity count -- how many detected beats
+//! separate one strong (downbeat-like) pulse from the next -- with no notion
+//! of the *denominator* a human would notate it with. `audan`'s own CLI and
+//! test data both display it as `beats_per_bar/4` by convention (S8.3), but
+//! this module cannot tell a 6/4 waltz-of-two-bars feel from a 6/8 compound
+//! feel: both are just "period 6" here, since nothing in this pipeline
+//! models beat subdivision. A track notated as 12/8 with a felt 6/8 pulse
+//! (e.g. `resources/test_data`'s "Crazy") will report whatever
+//! `beats_per_bar` its detected beat *pulse* happens to align to -- 6 if the
+//! tracker locks onto the eighth-note-triplet-ish pulse rather than the
+//! dotted-quarter one -- not "6/8" as a distinct answer from "6/4".
 
 pub struct MeterResult {
     pub beats_per_bar: u8,
@@ -24,8 +36,16 @@ pub struct MeterEstimator {
 
 impl Default for MeterEstimator {
     fn default() -> Self {
+        // 5 and 7 cover odd/asymmetric meters (5/4 "Take Five", 7/4/7/8
+        // progressive-rock bars) that the earlier {2,3,4,6} set could never
+        // pick, no matter how clean the signal, simply because they weren't
+        // offered as candidates at all -- confirmed directly against real
+        // recordings (`resources/test_data`), not a change made in the
+        // abstract. Neither aliases against an existing candidate the way
+        // 3-vs-6 does (5 and 7 are prime and divide none of 2/3/4/6), so
+        // this doesn't introduce a new instance of that ambiguity.
         Self {
-            candidates: vec![2, 3, 4, 6],
+            candidates: vec![2, 3, 4, 5, 6, 7],
         }
     }
 }
@@ -33,16 +53,20 @@ impl Default for MeterEstimator {
 /// A mild preference for more common meters, used only to break near-ties
 /// (see [`MeterEstimator::estimate`]'s doc comment). 4/4 is by a wide margin
 /// the most common meter in Western popular/electronic music; the rest are
-/// ordered roughly by how often they appear after it. Deliberately gentle
-/// (never more than a ~1.7x factor) so a signal with real, strong evidence
-/// for an unusual meter still wins -- this only tips a genuine coin-flip.
+/// ordered roughly by how often they appear after it, with 5 and 7 last
+/// among the named cases since asymmetric meters are rarer still than 6.
+/// Deliberately gentle (never more than a ~1.8x factor) so a signal with
+/// real, strong evidence for an unusual meter still wins -- this only tips a
+/// genuine coin-flip.
 fn meter_prior(n: u8) -> f64 {
     match n {
         4 => 1.0,
         3 => 0.9,
         2 => 0.8,
         6 => 0.75,
-        _ => 0.7,
+        5 => 0.65,
+        7 => 0.6,
+        _ => 0.55,
     }
 }
 
@@ -160,6 +184,24 @@ mod tests {
         let strengths = periodic_strengths(24, 3, 1.0, 0.2);
         let result = estimator.estimate(&strengths);
         assert_eq!(result.beats_per_bar, 3);
+        assert!(result.confidence > 0.0);
+    }
+
+    #[test]
+    fn recovers_five_beats_per_bar() {
+        let estimator = MeterEstimator::default();
+        let strengths = periodic_strengths(40, 5, 1.0, 0.2);
+        let result = estimator.estimate(&strengths);
+        assert_eq!(result.beats_per_bar, 5);
+        assert!(result.confidence > 0.0);
+    }
+
+    #[test]
+    fn recovers_seven_beats_per_bar() {
+        let estimator = MeterEstimator::default();
+        let strengths = periodic_strengths(56, 7, 1.0, 0.2);
+        let result = estimator.estimate(&strengths);
+        assert_eq!(result.beats_per_bar, 7);
         assert!(result.confidence > 0.0);
     }
 
