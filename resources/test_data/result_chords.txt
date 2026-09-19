@@ -1,0 +1,41 @@
+1|Enter Sandman|E:min,F#:maj,G:maj,A:maj,C:maj,B:maj|E:min,E:maj,B:min,F#:min,A:min
+2|Rolling in the Deep|C:min,G:min,Bb:maj,Ab:maj|C:min,D#:maj,E:maj,F:min,F#:maj,G:min,G#:maj,G#:min
+3|Dance with Somebody|?|E:min,F#:min,G#:min,A:maj,C#:min,B:maj,A#:min
+4|In My Place|A:maj,B:min,D:maj|G:maj,A:maj,B:min,D:maj,E:maj
+5|Zombie|E:min,C:maj,G:maj,D:maj|F:min,G:min,C:maj,E:min,D#:maj,F:maj
+6|Back in Black|E:maj,D:maj,A:maj,B:maj|A:maj,E:min,D:min,G:maj,B:min
+7|You Shook Me All Night Long|G:maj,C:maj,D:maj|G:min,G:maj
+8|Paranoid|E:min,D:maj,G:maj,C:maj|E:min,D#:maj,C:maj,D:min
+9|Dance with Somebody|?|E:min,F#:min,G#:min,A:maj,C#:min,B:maj,A#:min
+10|Long Train Runnin'|?|A#:maj,G:min,F:maj,C:min,C:maj,E:min
+11|Easy|Ab:maj,G:min,C:min,F:min,Db:maj,Eb:maj|G#:maj,A#:min,G#:min,B:maj,A:maj,A#:maj
+12|Bailando|E:min,C:maj,G:maj,D:maj|C:maj,G:maj,E:min,D:maj,E:maj,G:min,B:min,D:min
+13|Súbeme la Radio|?|A:min,G:maj,D:min,C:maj,F:maj
+14|Eres para mí|B:min,D:maj,E:maj,A:maj,G:maj|B:min,E:min,E:maj
+15|Basket Case|Eb:maj,Bb:maj,C:min,G:min,Ab:maj|D#:maj,G#:min
+16|Sweet Child O' Mine|Db:maj,B:maj,Gb:maj,Ab:maj,Eb:min|C#:maj,B:maj,F#:min,F#:maj,E:maj,D#:min,A#:maj,G#:min,D#:maj
+17|Entre dos tierras|?|E:min,G:maj,D:maj,C:maj
+18|I Was Made for Lovin' You|E:min,G:maj,D:maj,C:maj,A:min|E:maj,E:min
+19|Lost on You|Bb:min,Eb:maj,F:min,Db:maj,Ab:maj|D#:min,F:min,D#:maj,A#:min,C#:maj,A#:maj,G#:maj
+20|Stairway to Heaven|A:min,C:maj,D:maj,F:maj,G:maj,E:min|A:min,D:min,C:maj,D:maj,F:maj,G:maj,E:min
+21|Adiós|A:min,F:maj,C:maj,G:maj|A:min
+22|Mi Culpa|?|F#:min,A:maj,E:maj,F#:maj,D:maj,A:min
+23|Uptown Funk|D:min,G:maj|B:min,F:maj,C:min,D:min
+24|Hysteria|?|A:maj,C:maj,D:min,C#:min,A:min,G:maj
+25|Come As You Are|E:min,D:maj,G:maj,C:maj,A:maj|D:min,E:min,A:min,C:maj
+26|No Roots|B:min,E:min,G:maj,A:maj|F:maj,C:maj,E:min,B:min,E:maj
+27|Price Tag|F:maj,A:min,D:min,Bb:maj|F:maj,A#:maj,A:min
+28|Californication|A:min,F:maj,C:maj,G:maj,D:min|F:maj,D:min,G:maj,C:maj,D:maj,E:maj
+29|Little Monster|C:min,Ab:maj,F:min,Eb:maj|D#:maj,C#:min,C:maj,F#:maj
+30|Sweet Child O' Mine|Db:maj,B:maj,Gb:maj,Ab:maj,Eb:min|C#:maj,B:maj,F#:min,F#:maj,D#:min
+31|Toxicity|?|C:min
+32|Come Together|D:min,A:maj,G:maj,B:min|D:min,F:maj,C:maj,A:min,E:min,G:maj
+33|La Grange|A:maj,D:maj,C:maj,F#:min,A:min,F:maj,F#:min,A:min,D:maj|A:maj,D:maj,C:maj,F#:min,A:min,F:maj
+34|Baila Morena|G:min,C:maj,C:min,F:maj,Eb:maj,Bb:maj,D:maj|E:min,C:maj,A#:maj,D#:maj,F:maj,G:min
+35|Could You Be Loved|B:min,D:maj,G:maj,E:min,F#:min,A:maj|G#:min,B:min,E:min,A:maj,B:maj,A#:maj,G:maj,D:min,F:maj
+36|O Samba e o Tango (live)|?|B:min,C:maj,E:maj,F#:min,C#:min,G:maj,A:maj
+37|I Will Survive|A:min,D:min,G:maj,C:maj,F:maj,B:dim,E:maj|A:min,E:min,D:maj,C:maj,E:maj,G:min,G:maj,F:maj,B:maj,A:maj,D:min,C#:min
+38|Nothing Else Matters|E:min,D:maj,C:maj,G:maj,A:min,B:maj|E:min,A:min,D:maj,G:min,C:maj,D:min
+39|Take Five|Eb:min,Bb:min,Gb:maj,B:maj|G#:min,D#:min,D#:maj,B:min,E:maj
+40|Tolerate It|A:maj,E:maj,F#:min,D:maj|A:maj,G:maj,F#:min,A:min,D:maj,E:maj
+41|Crazy|A:maj,F#:min,D:maj,E:maj|D:maj,E:maj,F#:min,G:min,E:min,A:maj,B:min,C#:min,C:maj

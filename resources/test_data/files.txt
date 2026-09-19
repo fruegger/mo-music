@@ -1,7 +1,6 @@
 #|Size(KB)|File
 1|5180|01 Enter Sandman.mp3
 2|3564|01 Rolling In the Deep.mp3
-3|4968|02 Dance With Somebody.mp3
 4|3572|02 In My Place.mp3
 5|4792|03 Zombie.mp3
 6|4004|06 Back In Black.mp3

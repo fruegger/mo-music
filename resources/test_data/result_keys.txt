@@ -1,0 +1,42 @@
+Nr|Song|Key_O|Key_C|Confidence
+1|Enter Sandman|E:min|E:min|0.80
+2|Rolling in the Deep|C:min|G:min|0.68
+3|Dance with Somebody|C#:min|C#:min|0.77
+4|In My Place|A:maj|C#:min|0.89
+5|Zombie|E:min|E:min|0.76
+6|Back in Black|E:maj|E:maj|0.76
+7|You Shook Me All Night Long|G:maj|D:maj|0.85
+8|Paranoid|E:min|E:min|0.69
+9|Dance with Somebody|C#:min|C#:min|0.77
+10|Long Train Runnin'|G:min|G:min|0.81
+11|Easy|Ab:maj|D#:maj|0.84
+12|Bailando|E:min|E:min|0.69
+13|Súbeme la Radio|A:min|A:min|0.90
+14|Eres para mí|B:min|B:min|0.80
+15|Basket Case|Eb:maj|A#:maj|0.76
+16|Sweet Child O' Mine|Db:maj|D#:min|0.71
+17|Entre dos tierras|B:min|B:min|0.77
+18|I Was Made for Lovin' You|E:min|G#:min|0.76
+19|Lost on You|F:min|A#:maj|0.75
+20|Stairway to Heaven|A:min|A:min|0.92
+21|Adiós|A:min|A:min|0.84
+22|Mi Culpa|F#:min|A:maj|0.76
+23|Uptown Funk|D:min|D:min|0.70
+24|Hysteria|A:min|E:maj|0.72
+25|Come As You Are|E:min|E:min|0.69
+26|No Roots|B:min|A:min|0.64
+27|Price Tag|F:maj|D:min|0.80
+28|Californication|A:min|A:min|0.88
+29|Little Monster|C:min|G#:min|0.76
+30|Sweet Child O' Mine|Db:maj|D#:min|0.69
+31|Toxicity|C:min|G:min|0.77
+32|Come Together|D:min|D:min|0.76
+33|La Grange|A:maj|A:min|0.75
+34|Baila Morena|G:min|G:min|0.72
+35|Could You Be Loved|B:min|B:min|0.81
+36|O Samba e o Tango (live)|?|D:maj|0.69
+37|I Will Survive|A:min|E:maj|0.76
+38|Nothing Else Matters|E:min|E:min|0.86
+39|Take Five|Eb:min|D#:maj|0.73
+40|Tolerate It|A:maj|E:maj|0.81
+41|Crazy|A:maj|A:maj|0.86

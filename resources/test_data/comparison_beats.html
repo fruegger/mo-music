@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en"><head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Beat tracking runs vs. reference</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+          --paper:#eef1f3; --panel:#ffffff; --ink:#151b20; --muted:#5d6b76;
+          --line:#ccd5db; --line-soft:#e2e8ec;
+          --good-bg:#cdeadc; --good-ink:#0f5c3f;
+          --bad-bg:#f5d6d2; --bad-ink:#8c2b23;
+        }
+        @media (prefers-color-scheme: dark) {
+          :root:not([data-theme="light"]) {
+            --paper:#11161a; --panel:#171e23; --ink:#e6edf2; --muted:#93a3ae;
+            --line:#2c383f; --line-soft:#222c32;
+            --good-bg:#183d2e; --good-ink:#6fd3a4;
+            --bad-bg:#43211e; --bad-ink:#f0938a;
+          }
+        }
+        :root[data-theme="dark"] {
+          --paper:#11161a; --panel:#171e23; --ink:#e6edf2; --muted:#93a3ae;
+          --line:#2c383f; --line-soft:#222c32;
+          --good-bg:#183d2e; --good-ink:#6fd3a4;
+          --bad-bg:#43211e; --bad-ink:#f0938a;
+        }
+        * { box-sizing:border-box; }
+        body {
+          margin:0; background:var(--paper); color:var(--ink);
+          font-family:"IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+          font-variant-numeric:tabular-nums; -webkit-font-smoothing:antialiased;
+        }
+        .wrap { max-width:1180px; margin:0 auto; padding:40px 20px 72px; }
+        header p { color:var(--muted); max-width:62ch; line-height:1.55; margin:.6rem 0 0; }
+        h1 { font-size:1.6rem; font-weight:600; letter-spacing:-.01em; margin:0; }
+        .scores { display:grid; gap:14px; grid-template-columns:repeat(auto-fit,minmax(212px,1fr)); margin:28px 0 34px; }
+        .card { background:var(--panel); border:1px solid var(--line); padding:14px 16px 16px; }
+        .card h2 { font-size:.95rem; font-weight:600; margin:0 0 10px; }
+        .card dl { margin:0; display:grid; grid-template-columns:1fr auto; gap:5px 12px; font-size:.83rem; }
+        .card dt { color:var(--muted); }
+        .card dd { margin:0; text-align:right; }
+        .card b { font-weight:600; }
+        .scroll { overflow-x:auto; background:var(--panel); border:1px solid var(--line); }
+        table { border-collapse:collapse; width:100%; font-size:.83rem; }
+        th, td { padding:6px 9px; border-bottom:1px solid var(--line-soft); white-space:nowrap; text-align:left; }
+        thead th { position:sticky; top:0; background:var(--panel); border-bottom:1px solid var(--line);
+          font-weight:600; font-size:.74rem; color:var(--muted); z-index:2; }
+        thead tr.grouped th { position:static; border-bottom:none; padding-bottom:2px; color:var(--ink); }
+        thead tr.grouped th.spanhead { font-size:.8rem; text-align:left; }
+        td.num, th.num, td.mtr, th.mtr { text-align:right; }
+        td.nr { color:var(--muted); width:2.4rem; }
+        td.song { font-weight:500; max-width:19rem; overflow:hidden; text-overflow:ellipsis; }
+        td.ref { color:var(--muted); }
+        .sep { border-left:1px solid var(--line); }
+        td.best { background:var(--good-bg); color:var(--good-ink); }
+        td.worst { background:var(--bad-bg); color:var(--bad-ink); }
+        td.best .d, td.worst .d { color:inherit; opacity:.85; }
+        .v { font-weight:500; }
+        .d { color:var(--muted); font-size:.72rem; margin-left:5px; }
+        .oct { font-size:.66rem; margin-left:4px; padding:1px 4px; border:1px solid currentColor; opacity:.7; }
+        tbody tr:hover td { outline:1px solid var(--line); outline-offset:-1px; }
+        footer { margin-top:22px; color:var(--muted); font-size:.8rem; line-height:1.6; max-width:76ch; }
+        footer b { color:var(--ink); font-weight:500; }
+        .key { display:inline-block; padding:1px 7px; margin-right:6px; }
+        .key.g { background:var(--good-bg); color:var(--good-ink); }
+        .key.r { background:var(--bad-bg); color:var(--bad-ink); }
+    </style></head>
+<body><div class="wrap">
+    <header>
+        <h1>Beat tracking: four runs against the reference table</h1>
+        <p>41 tracks, four configurations. Tempo cells show the detected BPM and its deviation from
+            the reference; the greenest cell in a row is the closest run, the red one the furthest.
+            Meter cells are green when they match the reference meter.</p>
+    </header>
+
+    <section class="scores"><div class="card">
+        <h2>DSP</h2>
+        <dl>
+            <dt>Tempo within 4%</dt><dd><b>23</b>/39</dd>
+            <dt>Allowing octave errors</dt><dd><b>34</b>/39</dd>
+            <dt>Median error</dt><dd><b>1.3%</b></dd>
+            <dt>Meter correct</dt><dd><b>22</b>/41</dd>
+        </dl></div><div class="card">
+        <h2>DSP quick</h2>
+        <dl>
+            <dt>Tempo within 4%</dt><dd><b>23</b>/39</dd>
+            <dt>Allowing octave errors</dt><dd><b>35</b>/39</dd>
+            <dt>Median error</dt><dd><b>1.4%</b></dd>
+            <dt>Meter correct</dt><dd><b>20</b>/41</dd>
+        </dl></div><div class="card">
+        <h2>Model</h2>
+        <dl>
+            <dt>Tempo within 4%</dt><dd><b>31</b>/39</dd>
+            <dt>Allowing octave errors</dt><dd><b>38</b>/39</dd>
+            <dt>Median error</dt><dd><b>0.5%</b></dd>
+            <dt>Meter correct</dt><dd><b>35</b>/41</dd>
+        </dl></div><div class="card">
+        <h2>Model quick</h2>
+        <dl>
+            <dt>Tempo within 4%</dt><dd><b>32</b>/39</dd>
+            <dt>Allowing octave errors</dt><dd><b>38</b>/39</dd>
+            <dt>Median error</dt><dd><b>0.7%</b></dd>
+            <dt>Meter correct</dt><dd><b>34</b>/41</dd>
+        </dl></div></section>
+
+    <div class="scroll"><table>
+        <thead>
+        <tr class="grouped">
+            <th></th><th></th>
+            <th class="num spanhead" colspan="5">Tempo (BPM)</th>
+            <th class="mtr spanhead sep" colspan="5">Meter</th>
+        </tr>
+        <tr>
+            <th>#</th><th>Song</th>
+            <th class="num">Reference</th><th class="num grp sep">DSP</th><th class="num grp">DSP quick</th><th class="num grp">Model</th><th class="num grp">Model quick</th>
+            <th class="mtr sep">Reference</th><th class="mtr sep">DSP</th><th class="mtr">DSP quick</th><th class="mtr">Model</th><th class="mtr">Model quick</th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr><td class="nr">1</td><td class="song">Enter Sandman</td><td class="num ref">123</td><td class="num sep"><span class="v">123.6</span><span class="d">+0%</span></td><td class="num"><span class="v">122.3</span><span class="d">-1%</span></td><td class="num"><span class="v">123.8</span><span class="d">+1%</span></td><td class="num best"><span class="v">122.5</span><span class="d">-0%</span></td><td class="mtr ref">4/4</td><td class="mtr best sep">4/4</td><td class="mtr best ">4/4</td><td class="mtr best ">4/4</td><td class="mtr worst ">7/4</td></tr>
+        <tr><td class="nr">2</td><td class="song">Rolling in the Deep</td><td class="num ref">105</td><td class="num sep"><span class="v">104.8</span><span class="d">-0%</span></td><td class="num best"><span class="v">105.0</span><span class="d">0%</span></td><td class="num best"><span class="v">105.0</span><span class="d">0%</span></td><td class="num best"><span class="v">105.0</span><span class="d">0%</span></td><td class="mtr ref">4/4</td><td class="mtr best sep">4/4</td><td class="mtr worst ">7/4</td><td class="mtr best ">4/4</td><td class="mtr best ">4/4</td></tr>
+        <tr><td class="nr">3</td><td class="song">Dance with Somebody</td><td class="num ref">150</td><td class="num best sep"><span class="v">150.0</span><span class="d">0%</span></td><td class="num"><span class="v">150.5</span><span class="d">+0%</span></td><td class="num best"><span class="v">150.0</span><span class="d">0%</span></td><td class="num best"><span class="v">150.0</span><span class="d">0%</span></td><td class="mtr ref">4/4</td><td class="mtr best sep">4/4</td><td class="mtr best ">4/4</td><td class="mtr best ">4/4</td><td class="mtr best ">4/4</td></tr>
+        <tr><td class="nr">4</td><td class="song">In My Place</td><td class="num ref">72</td><td class="num worst sep"><span class="v">142.6</span><span class="d">+98%</span><span class="oct">÷2</span></td><td class="num"><span class="v">76.9</span><span class="d">+7%</span></td><td class="num best"><span class="v">72.4</span><span class="d">+1%</span></td><td class="num"><span class="v">72.8</span><span class="d">+1%</span></td><td class="mtr ref">4/4</td><td class="mtr worst sep">6/4</td><td class="mtr worst ">7/4</td><td class="mtr best ">4/4</td><td class="mtr best ">4/4</td></tr>
+        <tr><td class="nr">5</td><td class="song">Zombie</td><td class="num ref">84</td><td class="num worst sep"><span class="v">168.3</span><span class="d">+100%</span><span class="oct">÷2</span></td><td class="num"><span class="v">163.7</span><span class="d">+95%</span><span class="oct">÷2</span></td><td class="num best"><span class="v">83.5</span><span class="d">-1%</span></td><td class="num"><span class="v">82.0</span><span class="d">-2%</span></td><td class="mtr ref">4/4</td><td class="mtr best sep">4/4</td><td class="mtr best ">4/4</td><td class="mtr best ">4/4</td><td class="mtr best ">4/4</td></tr>
+        <tr><td class="nr">6</td><td class="song">Back in Black</td><td class="num ref">94</td><td class="num sep"><span class="v">92.7</span><span class="d">-1%</span></td><td class="num best"><span class="v">93.5</span><span class="d">-1%</span></td><td class="num best"><span class="v">93.5</span><span class="d">-1%</span></td><td class="num"><span class="v">93.0</span><span class="d">-1%</span></td><td class="mtr ref">4/4</td><td class="mtr worst sep">7/4</td><td class="mtr worst ">7/4</td><td class="mtr best ">4/4</td><td class="mtr best ">4/4</td></tr>
+        <tr><td class="nr">7</td><td class="song">You Shook Me All Night Long</td><td class="num ref">127</td><td class="num sep"><span class="v">127.7</span><span class="d">+1%</span></td><td class="num best"><span class="v">126.5</span><span class="d">-0%</span></td><td class="num"><span class="v">128.5</span><span class="d">+1%</span></td><td class="num"><span class="v">126.4</span><span class="d">-0%</span></td><td class="mtr ref">4/4</td><td class="mtr best sep">4/4</td><td class="mtr best ">4/4</td><td class="mtr best ">4/4</td><td class="mtr best ">4/4</td></tr>
+        <tr><td class="nr">8</td><td class="song">Paranoid</td><td class="num ref">163</td><td class="num sep"><span class="v">162.0</span><span class="d">-1%</span></td><td class="num"><span class="v">161.9</span><span class="d">-1%</span></td><td class="num best"><span class="v">162.9</span><span class="d">-0%</span></td><td class="num"><span class="v">162.6</span><span class="d">-0%</span></td><td class="mtr ref">4/4</td><td class="mtr best sep">4/4</td><td class="mtr worst ">6/4</td><td class="mtr best ">4/4</td><td class="mtr best ">4/4</td></tr>
+        <tr><td class="nr">9</td><td class="song">Dance with Somebody</td><td class="num ref">150</td><td class="num best sep"><span class="v">150.0</span><span class="d">0%</span></td><td class="num"><span class="v">150.5</span><span class="d">+0%</span></td><td class="num best"><span class="v">150.0</span><span class="d">0%</span></td><td class="num best"><span class="v">150.0</span><span class="d">0%</span></td><td class="mtr ref">4/4</td><td class="mtr best sep">4/4</td><td class="mtr best ">4/4</td><td class="mtr best ">4/4</td><td class="mtr best ">4/4</td></tr>
+        <tr><td class="nr">10</td><td class="song">Long Train Runnin&#x27;</td><td class="num ref">115</td><td class="num sep"><span class="v">117.6</span><span class="d">+2%</span></td><td class="num best"><span class="v">116.6</span><span class="d">+1%</span></td><td class="num"><span class="v">118.0</span><span class="d">+3%</span></td><td class="num"><span class="v">117.5</span><span class="d">+2%</span></td><td class="mtr ref">4/4</td><td class="mtr worst sep">6/4</td><td class="mtr worst ">7/4</td><td class="mtr best ">4/4</td><td class="mtr best ">4/4</td></tr>
+        <tr><td class="nr">11</td><td class="song">Easy</td><td class="num ref">66</td><td class="num sep"><span class="v">122.5</span><span class="d">+86%</span></td><td class="num best"><span class="v">122.0</span><span class="d">+85%</span></td><td class="num"><span class="v">124.7</span><span class="d">+89%</span></td><td class="num worst"><span class="v">126.2</span><span class="d">+91%</span></td><td class="mtr ref">4/4</td><td class="mtr worst sep">6/4</td><td class="mtr best ">4/4</td><td class="mtr best ">4/4</td><td class="mtr best ">4/4</td></tr>
+        <tr><td class="nr">12</td><td class="song">Bailando</td><td class="num ref">91</td><td class="num sep"><span class="v">122.1</span><span class="d">+34%</span></td><td class="num worst"><span class="v">181.9</span><span class="d">+100%</span><span class="oct">÷2</span></td><td class="num best"><span class="v">90.9</span><span class="d">-0%</span></td><td class="num best"><span class="v">90.9</span><span class="d">-0%</span></td><td class="mtr ref">4/4</td><td class="mtr worst sep">6/4</td><td class="mtr best ">4/4</td><td class="mtr best ">4/4</td><td class="mtr best ">4/4</td></tr>
+        <tr><td class="nr">13</td><td class="song">Súbeme la Radio</td><td class="num ref">91</td><td class="num worst sep"><span class="v">181.4</span><span class="d">+99%</span><span class="oct">÷2</span></td><td class="num"><span class="v">179.2</span><span class="d">+97%</span><span class="oct">÷2</span></td><td class="num"><span class="v">90.9</span><span class="d">-0%</span></td><td class="num best"><span class="v">91.0</span><span class="d">0%</span></td><td class="mtr ref">4/4</td><td class="mtr worst sep">7/4</td><td class="mtr worst ">6/4</td><td class="mtr best ">4/4</td><td class="mtr best ">4/4</td></tr>
+        <tr><td class="nr">14</td><td class="song">Eres para mí</td><td class="num ref">96</td><td class="num sep"><span class="v">96.8</span><span class="d">+1%</span></td><td class="num best"><span class="v">96.7</span><span class="d">+1%</span></td><td class="num"><span class="v">96.9</span><span class="d">+1%</span></td><td class="num"><span class="v">97.0</span><span class="d">+1%</span></td><td class="mtr ref">4/4</td><td class="mtr worst sep">6/4</td><td class="mtr worst ">5/4</td><td class="mtr best ">4/4</td><td class="mtr best ">4/4</td></tr>
+        <tr><td class="nr">15</td><td class="song">Basket Case</td><td class="num ref">85</td><td class="num best sep"><span class="v">87.9</span><span class="d">+3%</span></td><td class="num"><span class="v">111.1</span><span class="d">+31%</span></td><td class="num worst"><span class="v">174.9</span><span class="d">+106%</span><span class="oct">÷2</span></td><td class="num"><span class="v">170.1</span><span class="d">+100%</span><span class="oct">÷2</span></td><td class="mtr ref">4/4</td><td class="mtr best sep">4/4</td><td class="mtr worst ">6/4</td><td class="mtr best ">4/4</td><td class="mtr best ">4/4</td></tr>
+        <tr><td class="nr">16</td><td class="song">Sweet Child O&#x27; Mine</td><td class="num ref">125</td><td class="num best sep"><span class="v">125.3</span><span class="d">+0%</span></td><td class="num"><span class="v">127.2</span><span class="d">+2%</span></td><td class="num"><span class="v">125.5</span><span class="d">+0%</span></td><td class="num"><span class="v">126.8</span><span class="d">+1%</span></td><td class="mtr ref">4/4</td><td class="mtr best sep">4/4</td><td class="mtr best ">4/4</td><td class="mtr best ">4/4</td><td class="mtr best ">4/4</td></tr>
+        <tr><td class="nr">17</td><td class="song">Entre dos tierras</td><td class="num ref">166</td><td class="num sep"><span class="v">83.1</span><span class="d">-50%</span><span class="oct">×2</span></td><td class="num worst"><span class="v">83.0</span><span class="d">-50%</span><span class="oct">×2</span></td><td class="num best"><span class="v">166.2</span><span class="d">+0%</span></td><td class="num"><span class="v">166.6</span><span class="d">+0%</span></td><td class="mtr ref">4/4</td><td class="mtr best sep">4/4</td><td class="mtr best ">4/4</td><td class="mtr best ">4/4</td><td class="mtr best ">4/4</td></tr>
+        <tr><td class="nr">18</td><td class="song">I Was Made for Lovin&#x27; You</td><td class="num ref">129</td><td class="num best sep"><span class="v">128.7</span><span class="d">-0%</span></td><td class="num"><span class="v">128.4</span><span class="d">-0%</span></td><td class="num"><span class="v">128.5</span><span class="d">-0%</span></td><td class="num"><span class="v">128.3</span><span class="d">-1%</span></td><td class="mtr ref">4/4</td><td class="mtr best sep">4/4</td><td class="mtr worst ">7/4</td><td class="mtr best ">4/4</td><td class="mtr best ">4/4</td></tr>
+        <tr><td class="nr">19</td><td class="song">Lost on You</td><td class="num ref">87</td><td class="num sep"><span class="v">88.1</span><span class="d">+1%</span></td><td class="num"><span class="v">86.4</span><span class="d">-1%</span></td><td class="num"><span class="v">88.0</span><span class="d">+1%</span></td><td class="num best"><span class="v">86.5</span><span class="d">-1%</span></td><td class="mtr ref">4/4</td><td class="mtr best sep">4/4</td><td class="mtr worst ">6/4</td><td class="mtr best ">4/4</td><td class="mtr best ">4/4</td></tr>
+        <tr><td class="nr">20</td><td class="song">Stairway to Heaven</td><td class="num ref">72-98</td><td class="num worst sep"><span class="v">164.3</span><span class="d">+68%</span><span class="oct">÷2</span></td><td class="num"><span class="v">141.8</span><span class="d">+45%</span><span class="oct">×2/3</span></td><td class="num best"><span class="v">83.7</span><span class="d">0%</span></td><td class="num"><span class="v">71.4</span><span class="d">-1%</span></td><td class="mtr ref">4/4</td><td class="mtr best sep">4/4</td><td class="mtr best ">4/4</td><td class="mtr best ">4/4</td><td class="mtr best ">4/4</td></tr>
+        <tr><td class="nr">21</td><td class="song">Adiós</td><td class="num ref">?</td><td class="num sep"><span class="v">90.1</span></td><td class="num"><span class="v">117.5</span></td><td class="num"><span class="v">88.9</span></td><td class="num"><span class="v">88.9</span></td><td class="mtr ref">4/4</td><td class="mtr best sep">4/4</td><td class="mtr worst ">6/4</td><td class="mtr best ">4/4</td><td class="mtr best ">4/4</td></tr>
+        <tr><td class="nr">22</td><td class="song">Mi Culpa</td><td class="num ref">94</td><td class="num worst sep"><span class="v">187.1</span><span class="d">+99%</span><span class="oct">÷2</span></td><td class="num"><span class="v">92.8</span><span class="d">-1%</span></td><td class="num best"><span class="v">93.8</span><span class="d">-0%</span></td><td class="num best"><span class="v">93.8</span><span class="d">-0%</span></td><td class="mtr ref">4/4</td><td class="mtr best sep">4/4</td><td class="mtr worst ">5/4</td><td class="mtr best ">4/4</td><td class="mtr best ">4/4</td></tr>
+        <tr><td class="nr">23</td><td class="song">Uptown Funk</td><td class="num ref">115</td><td class="num best sep"><span class="v">115.1</span><span class="d">+0%</span></td><td class="num"><span class="v">115.4</span><span class="d">+0%</span></td><td class="num"><span class="v">115.3</span><span class="d">+0%</span></td><td class="num best"><span class="v">115.1</span><span class="d">+0%</span></td><td class="mtr ref">4/4</td><td class="mtr best sep">4/4</td><td class="mtr best ">4/4</td><td class="mtr best ">4/4</td><td class="mtr best ">4/4</td></tr>
+        <tr><td class="nr">24</td><td class="song">Hysteria</td><td class="num ref">94</td><td class="num sep"><span class="v">92.8</span><span class="d">-1%</span></td><td class="num worst"><span class="v">185.6</span><span class="d">+97%</span><span class="oct">÷2</span></td><td class="num best"><span class="v">93.3</span><span class="d">-1%</span></td><td class="num"><span class="v">93.0</span><span class="d">-1%</span></td><td class="mtr ref">4/4</td><td class="mtr best sep">4/4</td><td class="mtr best ">4/4</td><td class="mtr best ">4/4</td><td class="mtr best ">4/4</td></tr>
+        <tr><td class="nr">25</td><td class="song">Come As You Are</td><td class="num ref">120</td><td class="num sep"><span class="v">120.3</span><span class="d">+0%</span></td><td class="num"><span class="v">118.1</span><span class="d">-2%</span></td><td class="num"><span class="v">120.6</span><span class="d">+0%</span></td><td class="num best"><span class="v">120.1</span><span class="d">+0%</span></td><td class="mtr ref">4/4</td><td class="mtr worst sep">6/4</td><td class="mtr worst ">6/4</td><td class="mtr best ">4/4</td><td class="mtr best ">4/4</td></tr>
+        <tr><td class="nr">26</td><td class="song">No Roots</td><td class="num ref">116</td><td class="num sep"><span class="v">116.4</span><span class="d">+0%</span></td><td class="num best"><span class="v">116.1</span><span class="d">+0%</span></td><td class="num best"><span class="v">115.9</span><span class="d">-0%</span></td><td class="num"><span class="v">115.8</span><span class="d">-0%</span></td><td class="mtr ref">4/4</td><td class="mtr worst sep">7/4</td><td class="mtr worst ">7/4</td><td class="mtr best ">4/4</td><td class="mtr best ">4/4</td></tr>
+        <tr><td class="nr">27</td><td class="song">Price Tag</td><td class="num ref">175</td><td class="num best sep"><span class="v">173.3</span><span class="d">-1%</span></td><td class="num"><span class="v">173.1</span><span class="d">-1%</span></td><td class="num worst"><span class="v">87.5</span><span class="d">-50%</span><span class="oct">×2</span></td><td class="num"><span class="v">87.6</span><span class="d">-50%</span><span class="oct">×2</span></td><td class="mtr ref">4/4</td><td class="mtr best sep">4/4</td><td class="mtr best ">4/4</td><td class="mtr best ">4/4</td><td class="mtr best ">4/4</td></tr>
+        <tr><td class="nr">28</td><td class="song">Californication</td><td class="num ref">96</td><td class="num best sep"><span class="v">96.3</span><span class="d">+0%</span></td><td class="num"><span class="v">95.1</span><span class="d">-1%</span></td><td class="num"><span class="v">96.8</span><span class="d">+1%</span></td><td class="num"><span class="v">95.5</span><span class="d">-1%</span></td><td class="mtr ref">4/4</td><td class="mtr best sep">4/4</td><td class="mtr best ">4/4</td><td class="mtr best ">4/4</td><td class="mtr best ">4/4</td></tr>
+        <tr><td class="nr">29</td><td class="song">Little Monster</td><td class="num ref">96</td><td class="num sep"><span class="v">64.6</span><span class="d">-33%</span><span class="oct">×3/2</span></td><td class="num worst"><span class="v">187.3</span><span class="d">+95%</span><span class="oct">÷2</span></td><td class="num best"><span class="v">96.0</span><span class="d">0%</span></td><td class="num"><span class="v">95.8</span><span class="d">-0%</span></td><td class="mtr ref">4/4</td><td class="mtr worst sep">7/4</td><td class="mtr best ">4/4</td><td class="mtr best ">4/4</td><td class="mtr best ">4/4</td></tr>
+        <tr><td class="nr">30</td><td class="song">Sweet Child O&#x27; Mine</td><td class="num ref">125</td><td class="num sep"><span class="v">124.5</span><span class="d">-0%</span></td><td class="num"><span class="v">125.5</span><span class="d">+0%</span></td><td class="num best"><span class="v">125.2</span><span class="d">+0%</span></td><td class="num"><span class="v">125.6</span><span class="d">+0%</span></td><td class="mtr ref">4/4</td><td class="mtr worst sep">6/4</td><td class="mtr best ">4/4</td><td class="mtr best ">4/4</td><td class="mtr best ">4/4</td></tr>
+        <tr><td class="nr">31</td><td class="song">Toxicity</td><td class="num ref">117</td><td class="num best sep"><span class="v">123.0</span><span class="d">+5%</span></td><td class="num"><span class="v">77.1</span><span class="d">-34%</span><span class="oct">×3/2</span></td><td class="num"><span class="v">78.8</span><span class="d">-33%</span><span class="oct">×3/2</span></td><td class="num worst"><span class="v">77.0</span><span class="d">-34%</span><span class="oct">×3/2</span></td><td class="mtr ref">3/4 (mixed)</td><td class="mtr worst sep">6/4</td><td class="mtr worst ">4/4</td><td class="mtr worst ">4/4</td><td class="mtr worst ">4/4</td></tr>
+        <tr><td class="nr">32</td><td class="song">Come Together</td><td class="num ref">82</td><td class="num worst sep"><span class="v">165.6</span><span class="d">+102%</span><span class="oct">÷2</span></td><td class="num"><span class="v">162.8</span><span class="d">+99%</span><span class="oct">÷2</span></td><td class="num"><span class="v">83.4</span><span class="d">+2%</span></td><td class="num best"><span class="v">83.0</span><span class="d">+1%</span></td><td class="mtr ref">4/4</td><td class="mtr worst sep">6/4</td><td class="mtr best ">4/4</td><td class="mtr best ">4/4</td><td class="mtr best ">4/4</td></tr>
+        <tr><td class="nr">33</td><td class="song">La Grange</td><td class="num ref">160</td><td class="num best sep"><span class="v">160.2</span><span class="d">+0%</span></td><td class="num best"><span class="v">160.2</span><span class="d">+0%</span></td><td class="num"><span class="v">161.6</span><span class="d">+1%</span></td><td class="num"><span class="v">161.4</span><span class="d">+1%</span></td><td class="mtr ref">4/4</td><td class="mtr worst sep">6/4</td><td class="mtr worst ">6/4</td><td class="mtr best ">4/4</td><td class="mtr best ">4/4</td></tr>
+        <tr><td class="nr">34</td><td class="song">Baila Morena</td><td class="num ref">120</td><td class="num sep"><span class="v">119.5</span><span class="d">-0%</span></td><td class="num"><span class="v">119.9</span><span class="d">-0%</span></td><td class="num best"><span class="v">120.0</span><span class="d">0%</span></td><td class="num"><span class="v">119.8</span><span class="d">-0%</span></td><td class="mtr ref">4/4</td><td class="mtr best sep">4/4</td><td class="mtr best ">4/4</td><td class="mtr best ">4/4</td><td class="mtr best ">4/4</td></tr>
+        <tr><td class="nr">35</td><td class="song">Could You Be Loved</td><td class="num ref">103</td><td class="num best sep"><span class="v">102.8</span><span class="d">-0%</span></td><td class="num best"><span class="v">102.8</span><span class="d">-0%</span></td><td class="num"><span class="v">102.6</span><span class="d">-0%</span></td><td class="num"><span class="v">102.3</span><span class="d">-1%</span></td><td class="mtr ref">4/4</td><td class="mtr worst sep">5/4</td><td class="mtr best ">4/4</td><td class="mtr best ">4/4</td><td class="mtr best ">4/4</td></tr>
+        <tr><td class="nr">36</td><td class="song">O Samba e o Tango (live)</td><td class="num ref">?</td><td class="num sep"><span class="v">90.4</span></td><td class="num"><span class="v">89.9</span></td><td class="num"><span class="v">91.3</span></td><td class="num"><span class="v">90.9</span></td><td class="mtr ref">2/4</td><td class="mtr worst sep">5/4</td><td class="mtr worst ">7/4</td><td class="mtr worst ">4/4</td><td class="mtr worst ">4/4</td></tr>
+        <tr><td class="nr">37</td><td class="song">I Will Survive</td><td class="num ref">96</td><td class="num worst sep"><span class="v">190.4</span><span class="d">+98%</span><span class="oct">÷2</span></td><td class="num"><span class="v">185.4</span><span class="d">+93%</span><span class="oct">÷2</span></td><td class="num best"><span class="v">96.4</span><span class="d">+0%</span></td><td class="num"><span class="v">93.7</span><span class="d">-2%</span></td><td class="mtr ref">4/4</td><td class="mtr best sep">4/4</td><td class="mtr worst ">7/4</td><td class="mtr best ">4/4</td><td class="mtr best ">4/4</td></tr>
+        <tr><td class="nr">38</td><td class="song">Nothing Else Matters</td><td class="num ref">69</td><td class="num best sep"><span class="v">136.8</span><span class="d">+98%</span><span class="oct">÷2</span></td><td class="num"><span class="v">140.8</span><span class="d">+104%</span><span class="oct">÷2</span></td><td class="num"><span class="v">142.6</span><span class="d">+107%</span><span class="oct">÷2</span></td><td class="num worst"><span class="v">142.8</span><span class="d">+107%</span><span class="oct">÷2</span></td><td class="mtr ref">4/4 (some 6/4 bars)</td><td class="mtr best sep">4/4</td><td class="mtr best ">4/4</td><td class="mtr worst ">3/4</td><td class="mtr worst ">3/4</td></tr>
+        <tr><td class="nr">39</td><td class="song">Take Five</td><td class="num ref">174</td><td class="num sep"><span class="v">129.9</span><span class="d">-25%</span></td><td class="num"><span class="v">100.7</span><span class="d">-42%</span></td><td class="num worst"><span class="v">85.6</span><span class="d">-51%</span><span class="oct">×2</span></td><td class="num best"><span class="v">167.6</span><span class="d">-4%</span></td><td class="mtr ref">5/4</td><td class="mtr worst sep">6/4</td><td class="mtr worst ">6/4</td><td class="mtr worst ">4/4</td><td class="mtr worst ">4/4</td></tr>
+        <tr><td class="nr">40</td><td class="song">Tolerate It</td><td class="num ref">74</td><td class="num sep"><span class="v">148.5</span><span class="d">+101%</span><span class="oct">÷2</span></td><td class="num best"><span class="v">75.9</span><span class="d">+3%</span></td><td class="num"><span class="v">149.7</span><span class="d">+102%</span><span class="oct">÷2</span></td><td class="num worst"><span class="v">150.2</span><span class="d">+103%</span><span class="oct">÷2</span></td><td class="mtr ref">5/4 (often written 10/8)</td><td class="mtr worst sep">4/4</td><td class="mtr worst ">7/4</td><td class="mtr worst ">4/4</td><td class="mtr worst ">4/4</td></tr>
+        <tr><td class="nr">41</td><td class="song">Crazy</td><td class="num ref">81</td><td class="num best sep"><span class="v">154.3</span><span class="d">+90%</span></td><td class="num"><span class="v">160.5</span><span class="d">+98%</span><span class="oct">÷2</span></td><td class="num"><span class="v">162.3</span><span class="d">+100%</span><span class="oct">÷2</span></td><td class="num worst"><span class="v">162.4</span><span class="d">+100%</span><span class="oct">÷2</span></td><td class="mtr ref">12/8 (6/8 feel)</td><td class="mtr worst sep">4/4</td><td class="mtr worst ">6/4</td><td class="mtr worst ">6/4</td><td class="mtr worst ">6/4</td></tr>
+        </tbody></table></div>
+
+    <footer>
+        <p><span class="key g">green</span>closest to the reference in that row &nbsp;
+            <span class="key r">red</span>furthest away. Rows 21 and 36 have no reference tempo, so no
+            run is marked. Row 20 (Stairway to Heaven) is scored against the 72&ndash;98&nbsp;BPM range.</p>
+        <p>A badge such as <span class="oct">&times;2</span> means the detection lands within 4% of the
+            reference once multiplied by that factor &mdash; an octave error rather than a wrong pulse.
+            Meter is compared on the base signature only, so row 31 counts as 3/4, row 38 as 4/4,
+            rows 39&ndash;40 as 5/4 and row 41 as 12/8.</p>
+    </footer>
+</div></body></html>
