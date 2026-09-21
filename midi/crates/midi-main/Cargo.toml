@@ -1,0 +1,19 @@
+[package]
+name = "midi-main"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "the midi tool."
+default-run = "midi"
+
+[[bin]]
+name = "midi"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "=4.5.13", features = ["derive", "env"] }
+
+[dev-dependencies]
