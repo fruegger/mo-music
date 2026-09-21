@@ -1,6 +1,2 @@
-/target/
-**/*.rs.bk
-.audan-cache*/
-*.wav
-!resources/**/*.wav
-__pycache__/
+.DS_Store
+Thumbs.db
