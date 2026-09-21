@@ -155,6 +155,26 @@ pub enum Command {
         /// See `chords --beats` (RV5).
         #[arg(long)]
         beats: Option<PathBuf>,
+
+        /// Override `SegmentParams::kernel_half_size` (Foote-novelty kernel
+        /// half-width, in chroma feature frames). Diagnostic/tuning knob
+        /// (default's real-audio behavior is under active tuning, see
+        /// `audan-struct`'s `SegmentParams` doc comment); omit to use the
+        /// library default.
+        #[arg(long)]
+        seg_kernel_half_size: Option<usize>,
+
+        /// Override `SegmentParams::peak_threshold_k` (novelty-peak
+        /// acceptance threshold, in standard deviations above the mean).
+        /// Diagnostic/tuning knob; omit to use the library default.
+        #[arg(long)]
+        seg_peak_threshold_k: Option<f32>,
+
+        /// Override `SegmentParams::min_boundary_distance_frames` (minimum
+        /// spacing between accepted section boundaries, in chroma feature
+        /// frames). Diagnostic/tuning knob; omit to use the library default.
+        #[arg(long)]
+        seg_min_boundary_distance: Option<usize>,
     },
 
     /// Separate instrument stems (F6). Requires an explicit `--model`;

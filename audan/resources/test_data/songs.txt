@@ -1,13 +1,13 @@
 #|Song|Artist|Tempo|Meter|Key|Chords
 1|Enter Sandman|Metallica|123|4/4|E:min|E:min,F#:maj,G:maj,A:maj,C:maj,B:maj
 2|Rolling in the Deep|Adele|105|4/4|C:min|C:min,G:min,Bb:maj,Ab:maj
-4|In My Place|Coldplay|144|4/4|A:maj|A:maj,B:min,D:maj
-5|Zombie|The Cranberries|84|4/4|E:min|E:min,C:maj,G:maj,D:maj
-6|Back in Black|AC/DC|94|4/4|E:maj|E:maj,D:maj,A:maj,B:maj
+4|In My Place|Coldplay|72|4/4|A:maj|A:maj,F#:min,G:min,E:maj,D:maj
+5|Zombie|The Cranberries|82|4/4|E:min|E:min,C:maj,G:maj,D:maj
+6|Back in Black|AC/DC|94|4/4|E:maj|E:maj,D:maj,A:maj,B:maj;G:maj
 7|You Shook Me All Night Long|AC/DC|127|4/4|G:maj|G:maj,C:maj,D:maj
 8|Paranoid|Black Sabbath|163|4/4|E:min|E:min,D:maj,G:maj,C:maj
-9|Dance with Somebody|Mando Diao|150|4/4|C#:min|?
-10|Long Train Runnin'|The Doobie Brothers|115|4/4|G:min|?
+9|Dance with Somebody|Mando Diao|150|4/4|F#:min|G:min|F#:min,A:maj,C#:min,B:maj
+10|Long Train Runnin'|The Doobie Brothers|115|4/4|G:min|G:min,C:min,Eb:maj,D:maj
 11|Easy|Faith No More (Commodores cover)|66|4/4|Ab:maj|Ab:maj,G:min,C:min,F:min,Db:maj,Eb:maj
 12|Bailando|Enrique Iglesias ft. Descemer Bueno, Gente de Zona|91|4/4|E:min|E:min,C:maj,G:maj,D:maj
 13|Súbeme la Radio|Enrique Iglesias ft. Descemer Bueno, Zion & Lennox|91|4/4|A:min|?

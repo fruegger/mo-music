@@ -17,6 +17,9 @@ use crate::render::{effective_format, print_json, OutputFormat};
 pub fn run(
     file: &Path,
     beats_override: Option<&Path>,
+    seg_kernel_half_size: Option<usize>,
+    seg_peak_threshold_k: Option<f32>,
+    seg_min_boundary_distance: Option<usize>,
     cli: &Cli,
     resolved: &Resolved,
 ) -> anyhow::Result<()> {
@@ -41,8 +44,27 @@ pub fn run(
         ..Default::default()
     };
 
-    let result =
-        pipeline::resolve_struct(&resolver, &l1_key, &beats_key, &mono, &grid, &key_params)?;
+    // Diagnostic/tuning overrides (see `cli.rs`'s doc comments on these
+    // flags): `SegmentParams::default()` overridden field-by-field by
+    // whichever `--seg-*` flags were passed, so an unset flag keeps the
+    // library default for that one field.
+    let default_seg_params = audan_struct::SegmentParams::default();
+    let seg_params = audan_struct::SegmentParams {
+        kernel_half_size: seg_kernel_half_size.unwrap_or(default_seg_params.kernel_half_size),
+        peak_threshold_k: seg_peak_threshold_k.unwrap_or(default_seg_params.peak_threshold_k),
+        min_boundary_distance_frames: seg_min_boundary_distance
+            .unwrap_or(default_seg_params.min_boundary_distance_frames),
+    };
+
+    let result = pipeline::resolve_struct(
+        &resolver,
+        &l1_key,
+        &beats_key,
+        &mono,
+        &grid,
+        &key_params,
+        &seg_params,
+    )?;
 
     if cli.quiet {
         println!("{} sections", result.sections.len());

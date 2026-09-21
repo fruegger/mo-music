@@ -251,6 +251,14 @@ pub fn resolve_chords(
 #[derive(Serialize)]
 struct StructParams<'a> {
     beat_grid_key: &'a str,
+    // Folded in so that trying a different `SegmentParams` combination
+    // (currently exposed via `audan struct --seg-*` for empirical tuning
+    // against real audio) computes and caches a genuinely distinct result,
+    // rather than every combination silently colliding on the same L4 entry
+    // keyed only by the beat grid.
+    seg_kernel_half_size: usize,
+    seg_peak_threshold_k: f32,
+    seg_min_boundary_distance_frames: usize,
 }
 
 pub fn resolve_struct(
@@ -260,6 +268,7 @@ pub fn resolve_struct(
     mono: &MonoSignal,
     grid: &BeatGrid,
     key_params: &audan_dsp::KeyChromaParams,
+    seg_params: &audan_struct::SegmentParams,
 ) -> anyhow::Result<StructureResultDto> {
     let key = KeyDeriver::derive(
         Some(l1_key),
@@ -267,12 +276,14 @@ pub fn resolve_struct(
         1,
         &StructParams {
             beat_grid_key: &beats_key.to_hex(),
+            seg_kernel_half_size: seg_params.kernel_half_size,
+            seg_peak_threshold_k: seg_params.peak_threshold_k,
+            seg_min_boundary_distance_frames: seg_params.min_boundary_distance_frames,
         },
     );
     let dto: StructureResultDto = resolver.resolve(key, || {
         let chroma = audan_dsp::key_chroma(mono, key_params);
-        let result =
-            audan_struct::segment_structure(&chroma, grid, &audan_struct::SegmentParams::default());
+        let result = audan_struct::segment_structure(&chroma, grid, seg_params);
         Ok(StructureResultDto::from(&result))
     })?;
     Ok(dto)

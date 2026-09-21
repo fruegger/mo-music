@@ -11,31 +11,55 @@ use crate::novelty::novelty_curve;
 /// `min_boundary_distance_frames`) are counted in *feature* frames, i.e.
 /// units of the `Chroma`'s own `FrameGrid` hop -- not beats or seconds -- so
 /// their effective duration depends on the caller's chroma hop size.
+///
+/// The defaults below are empirically tuned, not just reasoned about in the
+/// abstract: this module's own unit tests only ever exercised synthetic,
+/// idealized 3-block chroma, and the original defaults (`kernel_half_size:
+/// 16`, `peak_threshold_k: 1.0`, `min_boundary_distance_frames: 8`) turned out
+/// to badly over-segment real recordings when checked against 40 real tracks
+/// in `resources/test_data` -- averaging 15.7 sections per track, 30% of them
+/// under 5 seconds, with individual tracks landing anywhere from 1 to 30
+/// sections. The values here were chosen from a grid sweep of `audan struct
+/// --seg-kernel-half-size/--seg-peak-threshold-k/--seg-min-boundary-distance`
+/// (see `crates/audan-cli`) against that same set: they bring the average down
+/// to ~6 sections per track with under 9% of sections shorter than 8 seconds
+/// and zero tracks over-segmented (`>= 15` sections), while a persistent
+/// handful of tracks built on one repeating riff/groove for their entire
+/// runtime (e.g. "Come As You Are") still collapse to a single section
+/// regardless of these settings -- plausibly a real property of those
+/// specific recordings (little harmonic contrast for a similarity-based
+/// method to key off), not a parameter this sweep can tune away.
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct SegmentParams {
-    /// Half-width of the checkerboard kernel, in feature frames. The default
-    /// (16) pairs with `audan_dsp::KeyChromaParams`'s default 4096-sample hop
-    /// at the 22050 Hz analysis rate (~5.4 frames/s), giving a ~6 s kernel --
-    /// a reasonable span to distinguish one section from its neighbours
-    /// without being swamped by within-section variation.
+    /// Half-width of the checkerboard kernel, in feature frames. At
+    /// `audan_dsp::KeyChromaParams`'s default 4096-sample hop / 22050 Hz
+    /// analysis rate (~5.4 frames/s), the default of 32 gives a ~12 s kernel
+    /// -- wide enough to see past short-term chroma jitter to large-scale
+    /// (verse/chorus-level) structure, per the module-level tuning note
+    /// above (the original ~6 s kernel was too narrow on real audio).
     pub kernel_half_size: usize,
     /// Peak-acceptance threshold, expressed as `mean + peak_threshold_k *
     /// stddev` of the novelty curve. Adaptive rather than a fixed absolute
     /// value because novelty magnitude scales with how similar/dissimilar
-    /// the underlying features are track to track.
+    /// the underlying features are track to track. Default 1.5 (see the
+    /// module-level tuning note); the original 1.0 accepted too many small,
+    /// noisy novelty peaks as real boundaries.
     pub peak_threshold_k: f32,
     /// Minimum spacing between accepted boundaries, in feature frames.
     /// Prevents two novelty samples one frame apart (a noisy, nearly-tied
     /// local maximum) from producing two boundaries a beat or two apart.
+    /// Default 43 (~8 s at the default chroma hop, see the module-level
+    /// tuning note); the original 8 frames (~1.5 s) was far shorter than any
+    /// real musical section.
     pub min_boundary_distance_frames: usize,
 }
 
 impl Default for SegmentParams {
     fn default() -> Self {
         SegmentParams {
-            kernel_half_size: 16,
-            peak_threshold_k: 1.0,
-            min_boundary_distance_frames: 8,
+            kernel_half_size: 32,
+            peak_threshold_k: 1.5,
+            min_boundary_distance_frames: 43,
         }
     }
 }
@@ -249,7 +273,14 @@ mod tests {
 
     #[test]
     fn recovers_roughly_three_sections_with_boundaries_near_true_transitions() {
-        let frames_per_block = 40;
+        // Blocks must be comfortably wider than `SegmentParams::default()`'s
+        // tuned-for-real-audio `min_boundary_distance_frames` (43) and
+        // `kernel_half_size` (32), or the two true transitions here (40
+        // frames apart at the old block width) collapse into one under the
+        // new defaults -- not a synthetic-test bug, just this test's block
+        // size predating the real-audio tuning (see `SegmentParams`'s own
+        // doc comment).
+        let frames_per_block = 100;
         let chroma = three_block_chroma(frames_per_block);
         let beats = beats_covering(&chroma, 0.5);
 

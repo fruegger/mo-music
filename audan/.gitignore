@@ -1,4 +1,5 @@
 /target/
+/resources/songs/
 **/*.rs.bk
 .audan-cache*/
 *.wav

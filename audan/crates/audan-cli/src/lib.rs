@@ -34,9 +34,21 @@ pub fn run(cli: Cli) -> anyhow::Result<()> {
         Command::Chords { file, beats } => {
             commands::chords::run(file, beats.as_deref(), &cli, &resolved)
         }
-        Command::Struct { file, beats } => {
-            commands::struct_cmd::run(file, beats.as_deref(), &cli, &resolved)
-        }
+        Command::Struct {
+            file,
+            beats,
+            seg_kernel_half_size,
+            seg_peak_threshold_k,
+            seg_min_boundary_distance,
+        } => commands::struct_cmd::run(
+            file,
+            beats.as_deref(),
+            *seg_kernel_half_size,
+            *seg_peak_threshold_k,
+            *seg_min_boundary_distance,
+            &cli,
+            &resolved,
+        ),
         Command::Stems { file, model } => commands::stems::run(file, model, &cli, &resolved),
         Command::Tag { file, write } => commands::tag::run(file, write, &cli, &resolved),
         Command::Cache { action } => commands::cache::run(action, &resolved),
