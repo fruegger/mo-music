@@ -6,7 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
-description = "the midi tool."
+description = "Command-line tool that parses a Standard MIDI File and prints its header, tracks and events"
 default-run = "midi"
 
 [[bin]]

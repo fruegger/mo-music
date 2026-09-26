@@ -10,13 +10,13 @@ edition = "2021"
 rust-version = "1.78"
 license = "MIT OR Apache-2.0"
 authors = ["me"]
-repository = "https://github.com/audan-rs/audan"
-description = "midi tool -- ... "
+repository = "https://github.com/fruegger/mo-music"
+description = "Reading and inspecting Standard MIDI Files"
 
 [workspace.dependencies]
 # intra-workspace
 
-# shared external deps (kept in sync across crates; see audan-architecture-arc42.md S5.1)
+# shared external deps (kept in sync across crates)
 thiserror = "1"
 
 [profile.release]
