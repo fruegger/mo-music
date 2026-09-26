@@ -11,7 +11,7 @@ pub struct MidiHeader {
 }
 
 /// Meaning of a delta time tick, from the header's division word.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum MidiDivision {
     /// top bit clear: ticks per quarter note
     TicksPerQuarterNote(u16),
@@ -26,6 +26,16 @@ pub struct MidiTrack {
     pub events: Vec<MidiTimeEvent>,
 }
 
+impl MidiTrack {
+    /// The track's events together with their absolute position in ticks from the start of the track.
+    pub fn timed_events(&self) -> impl Iterator<Item = (u64, &MidiTimeEvent)> {
+        self.events.iter().scan(0u64, |tick, event| {
+            *tick += event.delta_time as u64;
+            Some((*tick, event))
+        })
+    }
+}
+
 #[derive(Debug)]
 pub enum MidiFormat {
     SingleTrack,
@@ -34,8 +44,8 @@ pub enum MidiFormat {
 }
 
 pub struct MidiTimeEvent {
-    delta_time: u32,
-    message: MidiMessage,
+    pub delta_time: u32,
+    pub message: MidiMessage,
 }
 
 #[derive(Debug)]
@@ -201,14 +211,18 @@ pub fn parse_midi(bytes: &[u8]) -> Result<MidiFile, MidiError> {
 }
 
 fn division(word: u16) -> Result<MidiDivision, MidiError> {
+    // a tick length of zero would make every time conversion divide by zero
     if word & 0x8000 == 0 {
-        return Ok(MidiDivision::TicksPerQuarterNote(word));
+        return match word {
+            0 => Err(MidiError::InvalidMidiHeader()),
+            _ => Ok(MidiDivision::TicksPerQuarterNote(word)),
+        };
     }
     // the high byte holds the frame rate as a negative two's complement number
     let [fps, ticks_per_frame] = word.to_be_bytes();
     let frames_per_second = (fps as i8).unsigned_abs();
     match frames_per_second {
-        24 | 25 | 29 | 30 => Ok(MidiDivision::Smpte {
+        24 | 25 | 29 | 30 if ticks_per_frame > 0 => Ok(MidiDivision::Smpte {
             frames_per_second,
             ticks_per_frame,
         }),
@@ -231,22 +245,6 @@ fn parse_track(bytes: &[u8]) -> Result<MidiTrack, MidiError> {
         });
     }
     Ok(MidiTrack { events })
-}
-
-pub fn print_midi(midi: MidiFile) {
-    println!("header[");
-    println!(" format:{:?}", midi.header.format);
-    println!(" divisions:{:?}", midi.header.divisions);
-    println!(" tracks:({}) [", midi.tracks.len());
-    for track in &midi.tracks {
-        println!("  track[");
-        for event in &track.events {
-            println!("    {} - {:?}", event.delta_time, event.message);
-        }
-        println!("  ]");
-    }
-    println!(" ]");
-    println!("]");
 }
 
 /// Reads one event. `running_status` is the last channel status byte of the track;
