@@ -7,7 +7,19 @@ pub struct MidiFile {
 
 pub struct MidiHeader {
     pub format: MidiFormat,
-    pub divisions: i16,
+    pub divisions: MidiDivision,
+}
+
+/// Meaning of a delta time tick, from the header's division word.
+#[derive(Debug, PartialEq)]
+pub enum MidiDivision {
+    /// top bit clear: ticks per quarter note
+    TicksPerQuarterNote(u16),
+    /// top bit set: SMPTE frames per second (24, 25, 29 = 29.97 drop frame, 30) and ticks per frame
+    Smpte {
+        frames_per_second: u8,
+        ticks_per_frame: u8,
+    },
 }
 
 pub struct MidiTrack {
@@ -151,10 +163,15 @@ pub fn parse_midi(bytes: &[u8]) -> Result<MidiFile, MidiError> {
         return Err(MidiError::NotAMidiFile());
     }
     let header_len = reader.u32().map_err(|_| MidiError::InvalidMidiHeader())?;
-    if header_len != 6 {
+    // the header is 6 bytes today; the spec asks readers to skip anything a later version appends
+    if header_len < 6 {
         return Err(MidiError::InvalidMidiHeader());
     }
-    let mut header = MidiReader::new(reader.take(6).map_err(|_| MidiError::InvalidMidiHeader())?);
+    let mut header = MidiReader::new(
+        reader
+            .take(header_len as usize)
+            .map_err(|_| MidiError::InvalidMidiHeader())?,
+    );
     let format = match header.u16()? {
         0 => MidiFormat::SingleTrack,
         1 => MidiFormat::MultiTrack,
@@ -162,11 +179,19 @@ pub fn parse_midi(bytes: &[u8]) -> Result<MidiFile, MidiError> {
         _ => return Err(MidiError::InvalidMidiHeader()),
     };
     let nr_tracks = header.u16()?;
-    let divisions = header.u16()? as i16;
+    let divisions = division(header.u16()?)?;
 
     let mut tracks = Vec::new();
-    for track in 0..nr_tracks {
-        tracks.push(parse_track(&mut reader).map_err(|_| MidiError::InvalidMidiTrack(track + 1))?);
+    while tracks.len() < nr_tracks as usize {
+        let invalid = |_| MidiError::InvalidMidiTrack(tracks.len() as u16 + 1);
+        let kind = reader.take(4).map_err(invalid)?;
+        let len = reader.u32().map_err(invalid)? as usize;
+        let data = reader.take(len).map_err(invalid)?;
+        // the spec asks readers to skip chunk types they don't know
+        if kind == b"MTrk" {
+            let track = parse_track(data).map_err(invalid)?;
+            tracks.push(track);
+        }
     }
 
     Ok(MidiFile {
@@ -175,13 +200,25 @@ pub fn parse_midi(bytes: &[u8]) -> Result<MidiFile, MidiError> {
     })
 }
 
-fn parse_track(reader: &mut MidiReader) -> Result<MidiTrack, MidiError> {
-    if reader.take(4)? != b"MTrk" {
-        return Err(MidiError::InvalidMidiTrack(0));
+fn division(word: u16) -> Result<MidiDivision, MidiError> {
+    if word & 0x8000 == 0 {
+        return Ok(MidiDivision::TicksPerQuarterNote(word));
     }
-    let chunk_sz = reader.u32()? as usize;
-    // events are read from their own reader so they cannot run into the next chunk
-    let mut chunk = MidiReader::new(reader.take(chunk_sz)?);
+    // the high byte holds the frame rate as a negative two's complement number
+    let [fps, ticks_per_frame] = word.to_be_bytes();
+    let frames_per_second = (fps as i8).unsigned_abs();
+    match frames_per_second {
+        24 | 25 | 29 | 30 => Ok(MidiDivision::Smpte {
+            frames_per_second,
+            ticks_per_frame,
+        }),
+        _ => Err(MidiError::InvalidMidiHeader()),
+    }
+}
+
+/// Parses the body of an MTrk chunk; having only the chunk's bytes, events cannot run into the next chunk.
+fn parse_track(bytes: &[u8]) -> Result<MidiTrack, MidiError> {
+    let mut chunk = MidiReader::new(bytes);
 
     let mut events = Vec::new();
     let mut running_status = None;
@@ -199,7 +236,7 @@ fn parse_track(reader: &mut MidiReader) -> Result<MidiTrack, MidiError> {
 pub fn print_midi(midi: MidiFile) {
     println!("header[");
     println!(" format:{:?}", midi.header.format);
-    println!(" divisions:{}", midi.header.divisions);
+    println!(" divisions:{:?}", midi.header.divisions);
     println!(" tracks:({}) [", midi.tracks.len());
     for track in &midi.tracks {
         println!("  track[");
@@ -385,11 +422,91 @@ mod tests {
             9, 0x00, 0x90, 60, 100, 0x81, 0x00, 0x80, 60, 0,
         ];
         let midi = parse_midi(&bytes).unwrap();
-        assert_eq!(midi.header.divisions, 96);
+        assert_eq!(midi.header.divisions, MidiDivision::TicksPerQuarterNote(96));
         let events = &midi.tracks[0].events;
         assert_eq!(events.len(), 2);
         assert_eq!(events[1].delta_time, 128);
         assert!(matches!(events[1].message, MidiMessage::NoteOff(0, 60, 0)));
+    }
+
+    /// header with the given length field and body, followed by one empty track
+    fn file_with_header(header_len: u32, body: &[u8]) -> Vec<u8> {
+        let mut bytes = b"MThd".to_vec();
+        bytes.extend(header_len.to_be_bytes());
+        bytes.extend(body);
+        bytes.extend(b"MTrk\0\0\0\x04\x00\xff\x2f\x00");
+        bytes
+    }
+
+    #[test]
+    fn longer_header_is_skipped() {
+        let bytes = file_with_header(8, &[0, 0, 0, 1, 0, 96, 0xaa, 0xbb]);
+        let midi = parse_midi(&bytes).unwrap();
+        assert_eq!(midi.header.divisions, MidiDivision::TicksPerQuarterNote(96));
+        assert!(matches!(
+            midi.tracks[0].events[0].message,
+            MidiMessage::EndOfTrack
+        ));
+    }
+
+    #[test]
+    fn unknown_chunks_are_skipped() {
+        let mut bytes = file_with_header(6, &[0, 1, 0, 2, 0, 96]);
+        // an unknown chunk between the tracks, and one after the last track
+        bytes.extend(b"XFIH\0\0\0\x03abc");
+        bytes.extend(b"MTrk\0\0\0\x04\x00\xff\x2f\x00");
+        bytes.extend(b"XFKM\0\0\0\x00");
+        let midi = parse_midi(&bytes).unwrap();
+        assert_eq!(midi.tracks.len(), 2);
+        assert!(matches!(
+            midi.tracks[1].events[0].message,
+            MidiMessage::EndOfTrack
+        ));
+    }
+
+    #[test]
+    fn missing_track_is_an_error() {
+        let mut bytes = file_with_header(6, &[0, 1, 0, 2, 0, 96]);
+        bytes.extend(b"XFIH\0\0\0\x03abc");
+        assert!(matches!(
+            parse_midi(&bytes),
+            Err(MidiError::InvalidMidiTrack(2))
+        ));
+    }
+
+    #[test]
+    fn short_header_is_an_error() {
+        let bytes = file_with_header(4, &[0, 0, 0, 1]);
+        assert!(matches!(
+            parse_midi(&bytes),
+            Err(MidiError::InvalidMidiHeader())
+        ));
+    }
+
+    #[test]
+    fn smpte_divisions() {
+        // E7 = -25 fps, 40 ticks per frame (millisecond resolution)
+        let bytes = file_with_header(6, &[0, 0, 0, 1, 0xe7, 40]);
+        assert_eq!(
+            parse_midi(&bytes).unwrap().header.divisions,
+            MidiDivision::Smpte {
+                frames_per_second: 25,
+                ticks_per_frame: 40
+            }
+        );
+        // E3 = -29 fps (29.97 drop frame)
+        assert_eq!(
+            division(0xe350).unwrap(),
+            MidiDivision::Smpte {
+                frames_per_second: 29,
+                ticks_per_frame: 80
+            }
+        );
+        // -20 is not a SMPTE frame rate
+        assert!(matches!(
+            division(0xec04),
+            Err(MidiError::InvalidMidiHeader())
+        ));
     }
 
     #[test]
