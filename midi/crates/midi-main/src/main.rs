@@ -22,7 +22,7 @@ struct Args {
     file_positional: Option<PathBuf>,
 
     /// How to show the time of each event
-    #[arg(short, long, value_enum, default_value_t = TimeFormat::Delta)]
+    #[arg(short, long, value_enum, default_value_t = TimeFormat::Clock)]
     time: TimeFormat,
 
     /// How to show key signatures
