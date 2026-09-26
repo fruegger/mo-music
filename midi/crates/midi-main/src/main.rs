@@ -1,38 +1,43 @@
-use clap::Parser;
+use clap::{ArgGroup, Parser};
 use std::fs;
+use std::path::PathBuf;
+use std::process::ExitCode;
 mod midi;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
-
+#[command(group(ArgGroup::new("input").required(true).args(["file", "file_positional"])))]
 struct Args {
     /// Name of the midi file to read
-    #[arg(short, long)]
-    file: Option<String>,
+    #[arg(short, long, value_name = "FILE")]
+    file: Option<PathBuf>,
 
     /// Name of the midi file to read (positional form of --file)
-    file_positional: Option<String>,
+    #[arg(value_name = "FILE")]
+    file_positional: Option<PathBuf>,
 }
 
-fn main() {
+fn main() -> ExitCode {
     let args = Args::parse();
-    let file = args
-        .file
-        .or(args.file_positional)
-        .expect("either --file or a positional FILE argument is required");
+    // the "input" group guarantees exactly one of the two is set
+    let file = args.file.or(args.file_positional).unwrap();
 
-    let contents = fs::read(&file)
-            .expect("reading file {file} failed");
+    let contents = match fs::read(&file) {
+        Ok(contents) => contents,
+        Err(e) => {
+            eprintln!("midi: error: cannot read {}: {e}", file.display());
+            return ExitCode::FAILURE;
+        }
+    };
 
-    let result  = midi::parse_midi(&contents);
-    match result {
+    match midi::parse_midi(&contents) {
         Ok(m) => {
             midi::print_midi(m);
-            std::process::exit(0);
-            }
+            ExitCode::SUCCESS
+        }
         Err(e) => {
-            eprintln!("midi: error: {e:#}");
-            std::process::exit(1);
+            eprintln!("midi: error: {}: {e}", file.display());
+            ExitCode::FAILURE
         }
     }
 }
