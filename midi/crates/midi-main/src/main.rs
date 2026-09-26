@@ -1,5 +1,6 @@
 use clap::Parser;
 use std::fs;
+mod midi;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -19,15 +20,16 @@ fn main() {
         .file
         .or(args.file_positional)
         .expect("either --file or a positional FILE argument is required");
-    println!("file: {}", file);
 
-    let contents = fs::read_to_string(&file)
+    let contents = fs::read(&file)
             .expect("reading file {file} failed");
-    println!("contents: {}", contents);
 
-    let result : Result<(),std::io::Error> = Ok(());
+    let result  = midi::parse_midi(&contents);
     match result {
-        Ok(()) => std::process::exit(0),
+        Ok(m) => {
+            midi::print_midi(m);
+            std::process::exit(0);
+            }
         Err(e) => {
             eprintln!("midi: error: {e:#}");
             std::process::exit(1);

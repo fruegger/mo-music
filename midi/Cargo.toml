@@ -17,7 +17,7 @@ description = "midi tool -- ... "
 # intra-workspace
 
 # shared external deps (kept in sync across crates; see audan-architecture-arc42.md S5.1)
-
+thiserror = "1"
 
 [profile.release]
 lto = true
