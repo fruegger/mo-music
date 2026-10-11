@@ -107,8 +107,9 @@ pub enum Command {
         #[arg(long)]
         click: Option<PathBuf>,
 
-        /// Use a real neural backend (e.g. `beat_this`) instead of the
-        /// always-available onset_fallback default. Unlike `stems --model`,
+        /// Use a real neural backend instead of the always-available
+        /// onset_fallback default: `beat_this`, or `beat_this_small` (about
+        /// twice as fast, slightly less accurate). Unlike `stems --model`,
         /// this is optional: omitting it (or leaving `[beats] model` unset
         /// in analysis.toml) keeps `audan beats` working fully offline with
         /// no model, no network, no license prompt (ADR-7).

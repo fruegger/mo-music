@@ -38,6 +38,11 @@ optional graph-optimization aid, not required for the model to load or run
 correctly. On Linux/macOS `--infer-shapes` (the default) works fine and can
 be left on.
 
+`beat_this_small` (registry name) is the same pipeline on the upstream
+`small0` checkpoint: `$PY export.py beat_this_small0.onnx small0`, then convert
+as below. Newer `rten-convert` releases install a command instead of a
+runnable module: use `rten-convert --no-infer-shapes in.onnx out.rten`.
+
 The resulting `beat_this_final0.rten` is what gets hosted (see
 `resources/models/registry.json`'s `beat_this` entry) and loaded by
 `audan_beats::model::OnnxBackend`.

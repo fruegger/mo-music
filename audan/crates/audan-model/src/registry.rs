@@ -71,7 +71,8 @@ mod tests {
         let path =
             Path::new(env!("CARGO_MANIFEST_DIR")).join("../../resources/models/registry.json");
         let registry = load(&path).expect("resources/models/registry.json must load");
-        assert_eq!(registry.models.len(), 2);
+        assert_eq!(registry.models.len(), 3);
+        assert!(registry.find("beat_this_small").is_some());
     }
 
     #[test]

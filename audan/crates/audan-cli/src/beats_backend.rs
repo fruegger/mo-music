@@ -49,6 +49,11 @@ pub fn resolve(
     let entry = registry
         .find(name)
         .expect("resolve_backend_model already validated this name exists");
-    let backend = audan_beats::OnnxBackend::new(&path, entry.version.clone())?;
+    // Every registry model runs as the same `beat_this_onnx` backend, so the
+    // registry name goes into the version: it reaches the L3 cache key
+    // (`pipeline::resolve_beats`) and `BeatGrid.source`, keeping e.g.
+    // `beat_this` and `beat_this_small` grids apart.
+    let backend =
+        audan_beats::OnnxBackend::new(&path, format!("{}-{}", entry.name, entry.version))?;
     Ok(ResolvedBackend::Onnx(backend))
 }

@@ -7,7 +7,11 @@ run as part of the normal Rust build; it is a one-off (or re-run-when-needed)
 tool for producing that artifact from the upstream checkpoint.
 
 Usage (from an environment with the packages listed in README.md installed):
-    python export.py [output.onnx]
+    python export.py [output.onnx] [checkpoint]
+
+`checkpoint` is any name `beat_this.inference.load_model` accepts, e.g.
+`final0` (the default, what audan ships) or `small0` (the upstream smaller
+variant).
 """
 
 import sys
@@ -18,7 +22,7 @@ from beat_this.inference import load_model
 
 CHUNK = 1500
 NMELS = 128
-CHECKPOINT = "final0"
+DEFAULT_CHECKPOINT = "final0"
 
 
 class DictToStackedOutput(torch.nn.Module):
@@ -35,11 +39,12 @@ class DictToStackedOutput(torch.nn.Module):
 
 
 def main():
-    onnx_path = sys.argv[1] if len(sys.argv) > 1 else "beat_this_final0.onnx"
+    checkpoint = sys.argv[2] if len(sys.argv) > 2 else DEFAULT_CHECKPOINT
+    onnx_path = sys.argv[1] if len(sys.argv) > 1 else f"beat_this_{checkpoint}.onnx"
 
     print("torch:", torch.__version__)
-    print(f"loading checkpoint '{CHECKPOINT}'...")
-    model = load_model(CHECKPOINT, device="cpu")
+    print(f"loading checkpoint '{checkpoint}'...")
+    model = load_model(checkpoint, device="cpu")
     model.eval()
     print("loaded OK, params:", sum(p.numel() for p in model.parameters()))
 
