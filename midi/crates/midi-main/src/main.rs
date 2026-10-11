@@ -98,7 +98,8 @@ fn print_midi(midi: &MidiFile, time: TimeFormat, key: Option<KeyFormat>) {
     println!("header[");
     println!(" format:{:?}", midi.header.format);
     println!(" divisions:{:?}", divisions);
-    println!(" tracks:({}) [", midi.tracks.len());
+    println!("]");
+    println!("tracks:({}) [", midi.tracks.len());
     for track in &midi.tracks {
         let track_timeline;
         let timeline = match &song_timeline {
@@ -114,7 +115,7 @@ fn print_midi(midi: &MidiFile, time: TimeFormat, key: Option<KeyFormat>) {
             }
         };
 
-        println!("  track[");
+        println!(" track[");
         for (tick, event) in track.timed_events() {
             let when = match time {
                 TimeFormat::Delta => event.delta_time.to_string(),
@@ -128,8 +129,7 @@ fn print_midi(midi: &MidiFile, time: TimeFormat, key: Option<KeyFormat>) {
             };
             println!("    {} - {}", when, what);
         }
-        println!("  ]");
+        println!(" ]");
     }
-    println!(" ]");
     println!("]");
 }
