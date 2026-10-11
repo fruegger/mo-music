@@ -12,7 +12,8 @@
 //! max_window_len) with no pruning or recursive bin reuse; fine for the
 //! signal lengths this crate is exercised on, not for real-time use.
 
-use audan_core::{FrameGrid, FrameTime};
+use audan_core::{FrameGrid, FrameTime, PadMode};
+use rayon::prelude::*;
 
 use crate::stft::sample_at;
 use crate::window;
@@ -64,6 +65,50 @@ impl CqtParams {
 /// A constant-Q magnitude spectrogram: `magnitudes[frame][bin]`, with `bin`
 /// running from `params.f_min` upward at `params.bins_per_octave` steps per
 /// octave.
+struct Kernel {
+    re: Vec<f64>,
+    im: Vec<f64>,
+    norm: f64,
+}
+
+impl Kernel {
+    fn new(params: &CqtParams, k: usize, sample_rate: u32) -> Self {
+        let win = window::hann(params.window_len(k, sample_rate));
+        let f_k = params.bin_freq(k) as f64;
+        let (re, im) = win
+            .iter()
+            .enumerate()
+            .map(|(i, &w)| {
+                let phase = -std::f64::consts::TAU * f_k * i as f64 / sample_rate as f64;
+                (w as f64 * phase.cos(), w as f64 * phase.sin())
+            })
+            .unzip();
+        let norm = win.iter().map(|&x| x as f64).sum::<f64>() / 2.0;
+        Kernel { re, im, norm }
+    }
+
+    fn magnitude(&self, signal: &[f32], center_sample: i64, pad: PadMode) -> f32 {
+        let n_k = self.re.len() as i64;
+        let start = center_sample - n_k / 2;
+        let (mut re, mut im) = (0.0f64, 0.0f64);
+        if start >= 0 && (start + n_k) as usize <= signal.len() {
+            // Fully inside the signal (all but the edge frames): no padding.
+            let samples = &signal[start as usize..(start + n_k) as usize];
+            for ((&s, &kr), &ki) in samples.iter().zip(&self.re).zip(&self.im) {
+                re += s as f64 * kr;
+                im += s as f64 * ki;
+            }
+        } else {
+            for i in 0..n_k {
+                let s = sample_at(signal, start + i, pad) as f64;
+                re += s * self.re[i as usize];
+                im += s * self.im[i as usize];
+            }
+        }
+        ((re * re + im * im).sqrt() / self.norm.max(1e-9)) as f32
+    }
+}
+
 pub struct Cqt {
     pub grid: FrameGrid,
     pub params: CqtParams,
@@ -74,49 +119,27 @@ pub struct Cqt {
 impl Cqt {
     pub fn compute(grid: FrameGrid, params: CqtParams, signal: &[f32]) -> Self {
         let n_frames = grid.frame_count(signal.len());
-        let n_bins = params.n_bins();
         let sr = grid.sample_rate;
 
-        let bin_windows: Vec<Vec<f32>> = (0..n_bins)
-            .map(|k| window::hann(params.window_len(k, sr)))
+        // Each bin's kernel (Hann window times the bin's complex
+        // exponential) is the same for every frame, so it is built once here
+        // rather than with a cos/sin pair per sample per frame -- that made
+        // a 5-minute track's chord chroma (hop 512) take about a minute.
+        let kernels: Vec<Kernel> = (0..params.n_bins())
+            .map(|k| Kernel::new(&params, k, sr))
             .collect();
-        let bin_norms: Vec<f64> = bin_windows
-            .iter()
-            .map(|w| w.iter().map(|&x| x as f64).sum::<f64>() / 2.0)
+
+        let times: Vec<FrameTime> = (0..n_frames).map(|j| grid.time_of(j)).collect();
+        let magnitudes: Vec<Vec<f32>> = times
+            .par_iter()
+            .map(|t| {
+                let center_sample = (t.as_seconds() * sr as f64).round() as i64;
+                kernels
+                    .iter()
+                    .map(|kernel| kernel.magnitude(signal, center_sample, grid.pad))
+                    .collect()
+            })
             .collect();
-
-        let mut times = Vec::with_capacity(n_frames);
-        let mut magnitudes = Vec::with_capacity(n_frames);
-        for j in 0..n_frames {
-            // The only route from a frame index to a time is `time_of`; we
-            // then convert that canonical time back to a sample offset so
-            // every bin's (differently sized) window is centred consistently
-            // with the rest of the system, rather than re-deriving "centre"
-            // from k*hop by hand.
-            let t = grid.time_of(j);
-            let center_sample = (t.as_seconds() * sr as f64).round() as i64;
-
-            let mut row = Vec::with_capacity(n_bins);
-            for k in 0..n_bins {
-                let win = &bin_windows[k];
-                let n_k = win.len() as i64;
-                let f_k = params.bin_freq(k) as f64;
-                let start = center_sample - n_k / 2;
-
-                let mut re = 0.0f64;
-                let mut im = 0.0f64;
-                for i in 0..n_k {
-                    let s = sample_at(signal, start + i, grid.pad) as f64 * win[i as usize] as f64;
-                    let phase = -std::f64::consts::TAU * f_k * i as f64 / sr as f64;
-                    re += s * phase.cos();
-                    im += s * phase.sin();
-                }
-                let norm = bin_norms[k].max(1e-9);
-                row.push(((re * re + im * im).sqrt() / norm) as f32);
-            }
-            times.push(t);
-            magnitudes.push(row);
-        }
 
         Cqt {
             grid,

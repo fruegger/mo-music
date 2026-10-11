@@ -13,3 +13,4 @@ audan-core = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
 realfft = { workspace = true }
+rayon = { workspace = true }

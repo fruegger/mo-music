@@ -163,6 +163,7 @@ name = "audan-dsp"
 version = "0.1.0"
 dependencies = [
  "audan-core",
+ "rayon",
  "realfft",
  "serde",
  "thiserror 1.0.69",
