@@ -13,6 +13,7 @@ pub mod commands;
 pub mod config;
 pub mod license_gate;
 pub mod pipeline;
+pub mod progress;
 pub mod render;
 
 use cli::{Cli, Command};

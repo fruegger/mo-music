@@ -12,6 +12,7 @@ use crate::beats_backend;
 use crate::cli::Cli;
 use crate::config::Resolved;
 use crate::pipeline;
+use crate::progress::Progress;
 use crate::render::{effective_format, print_json, OutputFormat};
 
 pub fn run(
@@ -27,9 +28,11 @@ pub fn run(
     // own and uses the configured default backend.
     let backend = beats_backend::resolve(None, cli, resolved)?;
 
+    let progress = Progress::start(1, Progress::detect(cli.quiet));
+    let task = progress.task(file);
     let resolver = Resolver::open(&resolved.cache_root)?;
-    let (l0_key, signal) = pipeline::resolve_l0(&resolver, file)?;
-    let (l1_key, mono) = pipeline::resolve_l1_analysis(&resolver, &l0_key, &signal)?;
+    let (l0_key, signal) = pipeline::resolve_l0(&resolver, file, &task)?;
+    let (l1_key, mono) = pipeline::resolve_l1_analysis(&resolver, &l0_key, &signal, &task)?;
     let (beats_key, grid) = pipeline::resolve_beats(
         &resolver,
         &l1_key,
@@ -37,6 +40,7 @@ pub fn run(
         beats_override,
         pipeline::expected_beats_frames(backend.as_dyn()),
         backend.as_dyn(),
+        &task,
     )?;
 
     let key_params = audan_dsp::KeyChromaParams {
@@ -64,7 +68,10 @@ pub fn run(
         &grid,
         &key_params,
         &seg_params,
+        &task,
     )?;
+    task.finish(None);
+    progress.finish();
 
     if cli.quiet {
         println!("{} sections", result.sections.len());

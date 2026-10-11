@@ -42,6 +42,14 @@ blake3 = { workspace = true }
 # Pin to versions still built on edition2021.
 indexmap = "=2.2.6"
 
+# Console handle/width calls for the progress display (src/progress.rs).
+# Both versions are already in Cargo.lock via other dependencies.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_System_Console"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 [dev-dependencies]
 tempfile = { workspace = true }
 hound = { workspace = true }

@@ -37,6 +37,7 @@ use audan_cache::{CacheKey, CacheLayer, KeyDeriver, Resolver};
 use audan_core::{BeatGrid, FramesMeta, MonoSignal, Signal, ANALYSIS_SAMPLE_RATE};
 use serde::Serialize;
 
+use crate::progress::{Stage, StageReporter};
 use crate::render::StructureResultDto;
 
 pub fn hash_file(path: &Path) -> anyhow::Result<String> {
@@ -98,7 +99,16 @@ struct L0Params<'a> {
     decoder_version: &'a str,
 }
 
-pub fn resolve_l0(resolver: &Resolver, path: &Path) -> anyhow::Result<(CacheKey, Signal)> {
+// Every `resolve_*` below reports `CheckingCache` before the lookup and its
+// compute stage from *inside* the `resolve` closure, which only runs on a
+// miss -- so progress shows real work, and a fully warm run counts as cached.
+
+pub fn resolve_l0(
+    resolver: &Resolver,
+    path: &Path,
+    rep: &dyn StageReporter,
+) -> anyhow::Result<(CacheKey, Signal)> {
+    rep.stage(Stage::Hashing);
     let file_hash = hash_file(path)?;
     let key = KeyDeriver::derive(
         None,
@@ -110,7 +120,9 @@ pub fn resolve_l0(resolver: &Resolver, path: &Path) -> anyhow::Result<(CacheKey,
         },
     );
     let owned_path = path.to_path_buf();
+    rep.stage(Stage::CheckingCache);
     let signal: Signal = resolver.resolve(key, move || {
+        rep.stage(Stage::Decoding);
         let (signal, _report) = audan_io::decode_file(&owned_path)?;
         Ok(signal)
     })?;
@@ -121,6 +133,7 @@ pub fn resolve_l1_analysis(
     resolver: &Resolver,
     l0_key: &CacheKey,
     signal: &Signal,
+    rep: &dyn StageReporter,
 ) -> anyhow::Result<(CacheKey, MonoSignal)> {
     let key = KeyDeriver::derive(
         Some(l0_key),
@@ -128,7 +141,11 @@ pub fn resolve_l1_analysis(
         1,
         &ANALYSIS_SAMPLE_RATE,
     );
-    let mono: MonoSignal = resolver.resolve(key, || audan_io::to_analysis_rate(signal))?;
+    rep.stage(Stage::CheckingCache);
+    let mono: MonoSignal = resolver.resolve(key, || {
+        rep.stage(Stage::Resampling);
+        audan_io::to_analysis_rate(signal)
+    })?;
     Ok((key, mono))
 }
 
@@ -165,6 +182,7 @@ pub fn resolve_beats(
     beats_override: Option<&Path>,
     expected_frames: FramesMeta,
     backend: &dyn InferenceBackend,
+    rep: &dyn StageReporter,
 ) -> anyhow::Result<(CacheKey, BeatGrid)> {
     if let Some(path) = beats_override {
         let text = std::fs::read_to_string(path)
@@ -202,7 +220,11 @@ pub fn resolve_beats(
                 backend: format!("{}/{}", backend.name(), backend.version()),
             },
         );
-        let grid: BeatGrid = resolver.resolve(key, || audan_beats::track_beats(mono, backend))?;
+        rep.stage(Stage::CheckingCache);
+        let grid: BeatGrid = resolver.resolve(key, || {
+            rep.stage(Stage::TrackingBeats);
+            audan_beats::track_beats(mono, backend)
+        })?;
         Ok((key, grid))
     }
 }
@@ -222,6 +244,8 @@ struct ChordsParams<'a> {
     vocabulary: &'a str,
 }
 
+// One past clippy's limit only because of the progress reporter.
+#[allow(clippy::too_many_arguments)]
 pub fn resolve_chords(
     resolver: &Resolver,
     l1_key: &CacheKey,
@@ -230,6 +254,7 @@ pub fn resolve_chords(
     grid: &BeatGrid,
     params: &audan_dsp::ChordChromaParams,
     vocabulary: &str,
+    rep: &dyn StageReporter,
 ) -> anyhow::Result<audan_chords::ChordSequence> {
     let key = KeyDeriver::derive(
         Some(l1_key),
@@ -240,7 +265,9 @@ pub fn resolve_chords(
             vocabulary,
         },
     );
+    rep.stage(Stage::CheckingCache);
     let seq: audan_chords::ChordSequence = resolver.resolve(key, || {
+        rep.stage(Stage::Chords);
         Ok(audan_chords::estimate_chords_from_signal(
             mono, grid, params,
         ))
@@ -261,6 +288,8 @@ struct StructParams<'a> {
     seg_min_boundary_distance_frames: usize,
 }
 
+// One past clippy's limit only because of the progress reporter.
+#[allow(clippy::too_many_arguments)]
 pub fn resolve_struct(
     resolver: &Resolver,
     l1_key: &CacheKey,
@@ -269,6 +298,7 @@ pub fn resolve_struct(
     grid: &BeatGrid,
     key_params: &audan_dsp::KeyChromaParams,
     seg_params: &audan_struct::SegmentParams,
+    rep: &dyn StageReporter,
 ) -> anyhow::Result<StructureResultDto> {
     let key = KeyDeriver::derive(
         Some(l1_key),
@@ -281,7 +311,9 @@ pub fn resolve_struct(
             seg_min_boundary_distance_frames: seg_params.min_boundary_distance_frames,
         },
     );
+    rep.stage(Stage::CheckingCache);
     let dto: StructureResultDto = resolver.resolve(key, || {
+        rep.stage(Stage::Structure);
         let chroma = audan_dsp::key_chroma(mono, key_params);
         let result = audan_struct::segment_structure(&chroma, grid, seg_params);
         Ok(StructureResultDto::from(&result))

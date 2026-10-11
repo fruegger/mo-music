@@ -10,6 +10,7 @@ use crate::beats_backend;
 use crate::cli::Cli;
 use crate::config::Resolved;
 use crate::pipeline;
+use crate::progress::{Progress, Stage, StageReporter};
 
 pub fn run(file: &Path, write: &[String], cli: &Cli, resolved: &Resolved) -> anyhow::Result<()> {
     let want_bpm = write.iter().any(|f| f.eq_ignore_ascii_case("bpm"));
@@ -21,15 +22,23 @@ pub fn run(file: &Path, write: &[String], cli: &Cli, resolved: &Resolved) -> any
         .into());
     }
 
+    // No `--model` of its own; uses the configured default backend, see
+    // `commands::chords::run`. Resolved before progress starts, since it may
+    // prompt for a model license on stderr.
+    let backend = if want_bpm {
+        Some(beats_backend::resolve(None, cli, resolved)?)
+    } else {
+        None
+    };
+
+    let progress = Progress::start(1, Progress::detect(cli.quiet));
+    let task = progress.task(file);
     let resolver = Resolver::open(&resolved.cache_root)?;
-    let (l0_key, signal) = pipeline::resolve_l0(&resolver, file)?;
-    let (l1_key, mono) = pipeline::resolve_l1_analysis(&resolver, &l0_key, &signal)?;
+    let (l0_key, signal) = pipeline::resolve_l0(&resolver, file, &task)?;
+    let (l1_key, mono) = pipeline::resolve_l1_analysis(&resolver, &l0_key, &signal, &task)?;
 
     let mut update = audan_io::TagUpdate::default();
-    if want_bpm {
-        // No `--model` of its own; uses the configured default backend, see
-        // `commands::chords::run`.
-        let backend = beats_backend::resolve(None, cli, resolved)?;
+    if let Some(backend) = &backend {
         let (_beats_key, grid) = pipeline::resolve_beats(
             &resolver,
             &l1_key,
@@ -37,6 +46,7 @@ pub fn run(file: &Path, write: &[String], cli: &Cli, resolved: &Resolved) -> any
             None,
             pipeline::expected_beats_frames(backend.as_dyn()),
             backend.as_dyn(),
+            &task,
         )?;
         update.bpm = Some(grid.tempo.median_bpm);
     }
@@ -45,9 +55,12 @@ pub fn run(file: &Path, write: &[String], cli: &Cli, resolved: &Resolved) -> any
             pad: resolved.pad,
             ..Default::default()
         };
+        task.stage(Stage::Key);
         let ranked = audan_key::estimate_key_from_signal(&mono, &params);
         update.key = Some(ranked.top().value.camelot());
     }
+    task.finish(None);
+    progress.finish();
 
     audan_io::write_tags(file, &update)?;
     println!(

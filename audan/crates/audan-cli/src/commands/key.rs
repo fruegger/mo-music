@@ -10,19 +10,25 @@ use audan_cache::Resolver;
 use crate::cli::Cli;
 use crate::config::Resolved;
 use crate::pipeline;
+use crate::progress::{Progress, Stage, StageReporter};
 use crate::render::{effective_format, print_json, OutputFormat};
 
 pub fn run(file: &Path, cli: &Cli, resolved: &Resolved) -> anyhow::Result<()> {
+    let progress = Progress::start(1, Progress::detect(cli.quiet));
+    let task = progress.task(file);
     let resolver = Resolver::open(&resolved.cache_root)?;
-    let (l0_key, signal) = pipeline::resolve_l0(&resolver, file)?;
-    let (_l1_key, mono) = pipeline::resolve_l1_analysis(&resolver, &l0_key, &signal)?;
+    let (l0_key, signal) = pipeline::resolve_l0(&resolver, file, &task)?;
+    let (_l1_key, mono) = pipeline::resolve_l1_analysis(&resolver, &l0_key, &signal, &task)?;
 
     let params = audan_dsp::KeyChromaParams {
         pad: resolved.pad,
         ..Default::default()
     };
 
+    task.stage(Stage::Key);
     let ranked = audan_key::estimate_key_from_signal(&mono, &params);
+    task.finish(None);
+    progress.finish();
 
     if cli.strict {
         let conf = ranked.top().confidence;

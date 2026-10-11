@@ -2,7 +2,8 @@
 //! (beat grid). A single file renders richly (table/`-q`/`--format`); more
 //! than one file (explicit paths and/or directories, walked recursively for
 //! known audio extensions) runs as a batch (RV3): a `rayon` pool sized by
-//! `-j`, progress on stderr, one JSON-Lines result per line on stdout.
+//! `-j`, Gradle-style progress on stderr (see `progress`), one JSON-Lines
+//! result per line on stdout.
 
 use std::path::{Path, PathBuf};
 
@@ -13,6 +14,7 @@ use crate::beats_backend::{self, ResolvedBackend};
 use crate::cli::Cli;
 use crate::config::Resolved;
 use crate::pipeline;
+use crate::progress::{Progress, Stage, StageReporter};
 use crate::render::{effective_format, print_json, OutputFormat};
 
 const AUDIO_EXTENSIONS: &[&str] = &[
@@ -53,7 +55,11 @@ fn run_single(
     resolved: &Resolved,
     backend: &ResolvedBackend,
 ) -> anyhow::Result<()> {
-    let grid = compute_beats(file, resolved, backend, quick)?;
+    let progress = Progress::start(1, Progress::detect(cli.quiet));
+    let task = progress.task(file);
+    let grid = compute_beats(file, resolved, backend, quick, &task)?;
+    task.finish(None);
+    progress.finish();
 
     if cli.strict {
         let conf = grid.tempo.candidates.top().confidence;
@@ -166,15 +172,21 @@ fn run_batch(
     // key computes once), so no extra dedup logic belongs here. `backend` is
     // shared read-only across workers -- resolved once in `run` rather than
     // per file, since loading a real model is comparatively expensive.
+    let progress = Progress::start(files.len(), Progress::detect(cli.quiet));
     let results: Vec<(PathBuf, anyhow::Result<audan_core::BeatGrid>)> = pool.install(|| {
         files
             .par_iter()
             .map(|path| {
-                eprintln!("audan: analysing {}", path.display());
-                (path.clone(), compute_beats(path, resolved, backend, quick))
+                let task = progress.task(path);
+                let result = compute_beats(path, resolved, backend, quick, &task);
+                task.finish(result.as_ref().err());
+                (path.clone(), result)
             })
             .collect()
     });
+    // Clears the block before any stdout output, so a terminal shows the
+    // summary line followed by the JSON Lines, never interleaved with them.
+    progress.finish();
 
     let mut failures = 0usize;
     for (path, result) in &results {
@@ -217,10 +229,11 @@ fn compute_beats(
     resolved: &Resolved,
     backend: &ResolvedBackend,
     quick: bool,
+    rep: &dyn StageReporter,
 ) -> anyhow::Result<audan_core::BeatGrid> {
     let resolver = Resolver::open(&resolved.cache_root)?;
-    let (l0_key, signal) = pipeline::resolve_l0(&resolver, path)?;
-    let (l1_key, mono) = pipeline::resolve_l1_analysis(&resolver, &l0_key, &signal)?;
+    let (l0_key, signal) = pipeline::resolve_l0(&resolver, path, rep)?;
+    let (l1_key, mono) = pipeline::resolve_l1_analysis(&resolver, &l0_key, &signal, rep)?;
 
     if quick {
         // Bypasses resolve_beats' L3 cache entirely (see
@@ -228,6 +241,7 @@ fn compute_beats(
         // every time, over a windowed slice of the full mono signal rather
         // than the whole track.
         let windowed = pipeline::quick_window(&mono);
+        rep.stage(Stage::TrackingBeats);
         let mut grid = audan_beats::track_beats(&windowed, backend.as_dyn())?;
         grid.source.postproc = format!("{}+quick", grid.source.postproc);
         return Ok(grid);
@@ -240,6 +254,7 @@ fn compute_beats(
         None,
         pipeline::expected_beats_frames(backend.as_dyn()),
         backend.as_dyn(),
+        rep,
     )?;
     Ok(grid)
 }
