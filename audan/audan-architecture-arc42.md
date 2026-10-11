@@ -256,7 +256,7 @@ Two useful properties fall out for free. Identical audio in different containers
 
 | Layer | Content | Key formula |
 |---|---|---|
-| **L0** | Decoded PCM at native rate and channel count | `hash(file_bytes) + decoder_id + decoder_version` |
+| **L0** | Decoded PCM at native rate and channel count (key only, not stored -- see below) | `hash(file_bytes) + decoder_id + decoder_version` |
 | **L1** | Canonical analysis signal: mono `f32`, 22050 Hz (analysis) and 44100 Hz (stems) | `hash(L0_samples) + resample_params` |
 | **L2** | Cheap features: onset envelope, CQT, chroma (per parameter set), tempogram | `hash(L1) + stage_id + stage_version + params_hash` |
 | **L3** | **Beat grid** | as above |
@@ -264,6 +264,8 @@ Two useful properties fall out for free. Identical audio in different containers
 | **L5** | Stems, raw model outputs | as above |
 
 `decoder_id` is part of the L0 key for a specific reason: MP3 encoder delay and padding are handled differently by different decoders, so two decoders can disagree by roughly 26 ms on where the music starts. That offset propagates straight into the beat grid. See §8.4.
+
+L0 is keyed but its PCM is not stored: on an L1 miss the file is decoded and resampled in one step, and the native-rate signal is dropped. Measured on a 5-minute MP3, decoding takes ~0.3 s, while the stored native-rate stereo blob was >100 MB and slower to read back than decoding again. Blobs are encoded with `postcard` behind a format tag; blobs in an older format read as a miss and are recomputed.
 
 ### 5.3 Level 3 — `audan-beats`
 
@@ -294,8 +296,7 @@ sequenceDiagram
     R-->>CLI: miss
     R->>IO: resolve(L0) → miss → decode
     IO->>IO: symphonia decode, strip encoder delay
-    R->>R: store L0, key = hash(pcm)+decoder_id
-    R->>IO: resolve(L1) → miss → mono, resample 22050
+    R->>IO: resolve(L1) → miss → mono, resample 22050 (L0 keyed, not stored)
     R->>R: store L1
     B->>M: ensure("beat_this", "1.0")
     M-->>B: model path (cached, verified)

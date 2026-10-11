@@ -17,10 +17,16 @@
 //!   implementation would thread the real `DecodeReport.decoder_id` back
 //!   into the key, which is only possible by decoding unconditionally first
 //!   (defeating the point of keying on it) or restructuring `audan-io`'s
-//!   API to expose decoder identity without decoding. `decode_file` is still
-//!   only actually invoked on a miss, so the real payoff (skipping decode
-//!   entirely on a warm cache) holds regardless.
-//! - **L1** (`resample`): parent = L0 key, params = target sample rate.
+//!   API to expose decoder identity without decoding.
+//!
+//!   Only the L0 *key* is used; the decoded PCM itself is not stored. It is
+//!   decoded on an L1 miss and dropped after resampling. Measured on a
+//!   5-minute mp3: decoding takes ~0.3s, whereas storing the native-rate
+//!   stereo signal took seconds and >100 MB per track, and reading it back
+//!   was slower than decoding again -- while every warm run loaded it just
+//!   to reach the (much smaller) L1 entry above it.
+//! - **L1** (`resample`): parent = L0 key, params = target sample rate. On a
+//!   miss, decodes (L0) and resamples in one go.
 //! - **L3** (`beats`): parent = L1 key, params name the backend
 //!   (`track_beats_default` always uses `onset_fallback`, so bumping that
 //!   string is the invalidation lever if a real backend is added later).
@@ -34,7 +40,7 @@ use std::path::Path;
 
 use audan_beats::InferenceBackend;
 use audan_cache::{CacheKey, CacheLayer, KeyDeriver, Resolver};
-use audan_core::{BeatGrid, FramesMeta, MonoSignal, Signal, ANALYSIS_SAMPLE_RATE};
+use audan_core::{BeatGrid, FramesMeta, MonoSignal, ANALYSIS_SAMPLE_RATE};
 use serde::Serialize;
 
 use crate::progress::{Stage, StageReporter};
@@ -59,7 +65,7 @@ pub const QUICK_SKIP_SECONDS: f64 = 30.0;
 /// specifically. Decode/resample (L0/L1, still run over the whole file --
 /// see `quick_window`'s doc comment) are not flat-cost this way: on a cold
 /// cache they still scale with track length, same as a full analysis would,
-/// so total wall time only approaches flat once L0/L1 are warm.
+/// so total wall time only approaches flat once L1 is warm.
 pub const QUICK_WINDOW_SECONDS: f64 = 30.0;
 
 /// Slices `mono` down to `--quick` mode's window
@@ -103,14 +109,12 @@ struct L0Params<'a> {
 // compute stage from *inside* the `resolve` closure, which only runs on a
 // miss -- so progress shows real work, and a fully warm run counts as cached.
 
-pub fn resolve_l0(
-    resolver: &Resolver,
-    path: &Path,
-    rep: &dyn StageReporter,
-) -> anyhow::Result<(CacheKey, Signal)> {
+/// The L0 key for `path`: identifies the decoded signal without decoding
+/// (see the module doc for why L0 has a key but no stored blob).
+pub fn l0_key(path: &Path, rep: &dyn StageReporter) -> anyhow::Result<CacheKey> {
     rep.stage(Stage::Hashing);
     let file_hash = hash_file(path)?;
-    let key = KeyDeriver::derive(
+    Ok(KeyDeriver::derive(
         None,
         &CacheLayer::L0.stage_id("decode"),
         1,
@@ -118,21 +122,13 @@ pub fn resolve_l0(
             file_hash: &file_hash,
             decoder_version: audan_io::decode::SYMPHONIA_VERSION,
         },
-    );
-    let owned_path = path.to_path_buf();
-    rep.stage(Stage::CheckingCache);
-    let signal: Signal = resolver.resolve(key, move || {
-        rep.stage(Stage::Decoding);
-        let (signal, _report) = audan_io::decode_file(&owned_path)?;
-        Ok(signal)
-    })?;
-    Ok((key, signal))
+    ))
 }
 
 pub fn resolve_l1_analysis(
     resolver: &Resolver,
     l0_key: &CacheKey,
-    signal: &Signal,
+    path: &Path,
     rep: &dyn StageReporter,
 ) -> anyhow::Result<(CacheKey, MonoSignal)> {
     let key = KeyDeriver::derive(
@@ -143,8 +139,10 @@ pub fn resolve_l1_analysis(
     );
     rep.stage(Stage::CheckingCache);
     let mono: MonoSignal = resolver.resolve(key, || {
+        rep.stage(Stage::Decoding);
+        let (signal, _report) = audan_io::decode_file(path)?;
         rep.stage(Stage::Resampling);
-        audan_io::to_analysis_rate(signal)
+        audan_io::to_analysis_rate(&signal)
     })?;
     Ok((key, mono))
 }

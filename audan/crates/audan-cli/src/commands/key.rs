@@ -17,8 +17,8 @@ pub fn run(file: &Path, cli: &Cli, resolved: &Resolved) -> anyhow::Result<()> {
     let progress = Progress::start(1, Progress::detect(cli.quiet));
     let task = progress.task(file);
     let resolver = Resolver::open(&resolved.cache_root)?;
-    let (l0_key, signal) = pipeline::resolve_l0(&resolver, file, &task)?;
-    let (_l1_key, mono) = pipeline::resolve_l1_analysis(&resolver, &l0_key, &signal, &task)?;
+    let l0_key = pipeline::l0_key(file, &task)?;
+    let (_l1_key, mono) = pipeline::resolve_l1_analysis(&resolver, &l0_key, file, &task)?;
 
     let params = audan_dsp::KeyChromaParams {
         pad: resolved.pad,

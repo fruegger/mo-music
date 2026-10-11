@@ -27,6 +27,9 @@ getrandom = "0.3"
 # to the same edition2024 getrandom 0.4 this workspace's toolchain can't
 # parse. Pin to the last 0.1.x release still on getrandom 0.3.
 jobserver = "=0.1.34"
+# Typed blob encoding (blob_store.rs). Not bincode: bincode 1.x carries an
+# "unmaintained" advisory, which deny.toml's [advisories] would reject.
+postcard = { version = "1.1.3", default-features = false, features = ["alloc"] }
 
 [dev-dependencies]
 tempfile = { workspace = true }

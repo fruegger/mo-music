@@ -54,14 +54,14 @@ fn beats_end_to_end_produces_a_sane_beat_grid() {
 
     audan_cli::run(cli).unwrap();
 
-    // The L0/L1/L3 entries the run above must have produced are directly
-    // inspectable through the same `Resolver`/`Evictor` API `audan cache
-    // stats` uses.
+    // The L1/L3 entries the run above must have produced (L0 is keyed but
+    // never stored, see `pipeline`'s module doc) are directly inspectable
+    // through the same `Resolver`/`Evictor` API `audan cache stats` uses.
     let resolver = audan_cache::Resolver::open(&cache_dir).unwrap();
     let stats = resolver.evictor().stats().unwrap();
     assert!(
-        stats.count >= 3,
-        "expected at least L0 + L1 + L3 cache entries, got {}",
+        stats.count >= 2,
+        "expected at least L1 + L3 cache entries, got {}",
         stats.count
     );
     assert!(stats.total_bytes > 0);

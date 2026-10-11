@@ -232,8 +232,8 @@ fn compute_beats(
     rep: &dyn StageReporter,
 ) -> anyhow::Result<audan_core::BeatGrid> {
     let resolver = Resolver::open(&resolved.cache_root)?;
-    let (l0_key, signal) = pipeline::resolve_l0(&resolver, path, rep)?;
-    let (l1_key, mono) = pipeline::resolve_l1_analysis(&resolver, &l0_key, &signal, rep)?;
+    let l0_key = pipeline::l0_key(path, rep)?;
+    let (l1_key, mono) = pipeline::resolve_l1_analysis(&resolver, &l0_key, path, rep)?;
 
     if quick {
         // Bypasses resolve_beats' L3 cache entirely (see

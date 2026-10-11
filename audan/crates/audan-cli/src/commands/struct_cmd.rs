@@ -31,8 +31,8 @@ pub fn run(
     let progress = Progress::start(1, Progress::detect(cli.quiet));
     let task = progress.task(file);
     let resolver = Resolver::open(&resolved.cache_root)?;
-    let (l0_key, signal) = pipeline::resolve_l0(&resolver, file, &task)?;
-    let (l1_key, mono) = pipeline::resolve_l1_analysis(&resolver, &l0_key, &signal, &task)?;
+    let l0_key = pipeline::l0_key(file, &task)?;
+    let (l1_key, mono) = pipeline::resolve_l1_analysis(&resolver, &l0_key, file, &task)?;
     let (beats_key, grid) = pipeline::resolve_beats(
         &resolver,
         &l1_key,

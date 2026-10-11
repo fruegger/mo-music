@@ -13,6 +13,10 @@ use serde::Serialize;
 
 use crate::key::CacheKey;
 
+/// Leads every typed blob ([`BlobStore::put`]): "audan blob", format 1
+/// (postcard). Bump the digit on any change to the encoding.
+pub const BLOB_MAGIC: &[u8; 4] = b"AUB1";
+
 pub struct BlobStore {
     blobs_dir: PathBuf,
 }
@@ -80,23 +84,29 @@ impl BlobStore {
         }
     }
 
-    /// Serialise `value` with `serde_json` and store it. Fine for scaffold
-    /// purposes; a production build might prefer `bincode` for large `f32`
-    /// arrays (L1/L2 signal and feature blobs), where JSON's per-number
-    /// overhead is significant even after zstd.
+    /// Serialise `value` with `postcard` and store it behind [`BLOB_MAGIC`].
+    /// A compact binary encoding rather than JSON: the L1 signal blobs are
+    /// millions of `f32`s, which JSON spent seconds formatting and parsing
+    /// (and wrote at ~3x the size) on every cold/warm run of a single track.
     pub fn put<T: Serialize>(&self, key: &CacheKey, value: &T) -> Result<u64> {
-        let json = serde_json::to_vec(value)
+        let bytes = postcard::to_extend(value, BLOB_MAGIC.to_vec())
             .map_err(|e| AudanError::Cache(format!("blob serialise failed: {e}")))?;
-        self.put_bytes(key, &json)
+        self.put_bytes(key, &bytes)
     }
 
+    /// `Ok(None)` both for a missing blob and for one written in an older
+    /// format (no [`BLOB_MAGIC`] -- e.g. the JSON blobs of earlier builds),
+    /// so the resolver recomputes and overwrites it instead of failing.
     pub fn get<T: DeserializeOwned>(&self, key: &CacheKey) -> Result<Option<T>> {
         match self.get_bytes(key)? {
-            Some(bytes) => {
-                let value = serde_json::from_slice(&bytes)
-                    .map_err(|e| AudanError::Cache(format!("blob deserialise failed: {e}")))?;
-                Ok(Some(value))
-            }
+            Some(bytes) => match bytes.strip_prefix(BLOB_MAGIC) {
+                Some(body) => {
+                    let value = postcard::from_bytes(body)
+                        .map_err(|e| AudanError::Cache(format!("blob deserialise failed: {e}")))?;
+                    Ok(Some(value))
+                }
+                None => Ok(None),
+            },
             None => Ok(None),
         }
     }
@@ -136,6 +146,17 @@ mod tests {
 
         let read_back: Grid = store.get(&key).unwrap().unwrap();
         assert_eq!(read_back, grid);
+    }
+
+    #[test]
+    fn legacy_json_blob_reads_as_a_miss() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = BlobStore::open(dir.path()).unwrap();
+        let key = crate::KeyDeriver::derive(None, "legacy", 1, &"json");
+
+        store.put_bytes(&key, br#"{"values":[0.1,0.2]}"#).unwrap();
+        let read_back: Option<Vec<f32>> = store.get(&key).unwrap();
+        assert!(read_back.is_none());
     }
 
     #[test]

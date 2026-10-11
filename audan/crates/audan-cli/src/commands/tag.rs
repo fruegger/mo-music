@@ -34,8 +34,8 @@ pub fn run(file: &Path, write: &[String], cli: &Cli, resolved: &Resolved) -> any
     let progress = Progress::start(1, Progress::detect(cli.quiet));
     let task = progress.task(file);
     let resolver = Resolver::open(&resolved.cache_root)?;
-    let (l0_key, signal) = pipeline::resolve_l0(&resolver, file, &task)?;
-    let (l1_key, mono) = pipeline::resolve_l1_analysis(&resolver, &l0_key, &signal, &task)?;
+    let l0_key = pipeline::l0_key(file, &task)?;
+    let (l1_key, mono) = pipeline::resolve_l1_analysis(&resolver, &l0_key, file, &task)?;
 
     let mut update = audan_io::TagUpdate::default();
     if let Some(backend) = &backend {
