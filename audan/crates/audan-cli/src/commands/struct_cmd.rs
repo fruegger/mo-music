@@ -21,6 +21,7 @@ pub fn run(
     seg_kernel_half_size: Option<usize>,
     seg_peak_threshold_k: Option<f32>,
     seg_min_boundary_distance: Option<usize>,
+    seg_snap_downbeats: Option<bool>,
     cli: &Cli,
     resolved: &Resolved,
 ) -> anyhow::Result<()> {
@@ -58,6 +59,7 @@ pub fn run(
         peak_threshold_k: seg_peak_threshold_k.unwrap_or(default_seg_params.peak_threshold_k),
         min_boundary_distance_frames: seg_min_boundary_distance
             .unwrap_or(default_seg_params.min_boundary_distance_frames),
+        snap_to_downbeats: seg_snap_downbeats.unwrap_or(default_seg_params.snap_to_downbeats),
     };
 
     let result = pipeline::resolve_struct(

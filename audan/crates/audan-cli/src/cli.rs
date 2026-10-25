@@ -176,6 +176,12 @@ pub enum Command {
         /// frames). Diagnostic/tuning knob; omit to use the library default.
         #[arg(long)]
         seg_min_boundary_distance: Option<usize>,
+
+        /// Override `SegmentParams::snap_to_downbeats` (move each boundary
+        /// to the nearest downbeat). Diagnostic/tuning knob; omit to use the
+        /// library default.
+        #[arg(long)]
+        seg_snap_downbeats: Option<bool>,
     },
 
     /// Separate instrument stems (F6). Requires an explicit `--model`;

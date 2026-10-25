@@ -52,14 +52,22 @@ pub struct SegmentParams {
     /// tuning note); the original 8 frames (~1.5 s) was far shorter than any
     /// real musical section.
     pub min_boundary_distance_frames: usize,
+    /// Move each boundary to the nearest downbeat of the beat grid. Sections
+    /// start on a bar, so this removes the half-bar misses of a novelty peak
+    /// (chroma novelty peaks sit a little before or after the real change).
+    /// Ignored when the grid has no downbeats. Off by default: against the 20
+    /// MIDI-annotated songs it did not raise boundary F-measure (0.34 vs 0.35
+    /// at 3 s with the DSP grid; +0.01 at 0.5 s with the `beat_this` grid).
+    pub snap_to_downbeats: bool,
 }
 
 impl Default for SegmentParams {
     fn default() -> Self {
         SegmentParams {
             kernel_half_size: 32,
-            peak_threshold_k: 1.5,
-            min_boundary_distance_frames: 43,
+            peak_threshold_k: 0.5,
+            min_boundary_distance_frames: 24,
+            snap_to_downbeats: false,
         }
     }
 }
@@ -142,6 +150,17 @@ fn nearest_beat_index(beats: &[f64], time: f64) -> BeatIndex {
     }
 }
 
+/// The downbeat closest to `beat` (by beat count, ties towards the earlier
+/// one); `beat` itself when the grid has no downbeats.
+fn nearest_downbeat(beats: &BeatGrid, beat: BeatIndex) -> BeatIndex {
+    beats
+        .downbeats
+        .iter()
+        .copied()
+        .min_by_key(|&d| (d.abs_diff(beat), d))
+        .unwrap_or(beat)
+}
+
 /// Segments `chroma` into unlabeled structural sections, beat-indexed
 /// against `beats`. See RISK-8: `SectionEvent::label` is always `None`.
 pub fn segment_structure(
@@ -169,7 +188,12 @@ pub fn segment_structure(
         .into_iter()
         .map(|frame| {
             let time = chroma.grid.time_of(frame).as_seconds();
-            nearest_beat_index(&beats.beats, time)
+            let beat = nearest_beat_index(&beats.beats, time);
+            if params.snap_to_downbeats {
+                nearest_downbeat(beats, beat)
+            } else {
+                beat
+            }
         })
         .collect();
 
@@ -210,7 +234,7 @@ mod tests {
             schema_version: BeatGrid::CURRENT_SCHEMA_VERSION,
             duration_seconds,
             beats: beat_times,
-            downbeats: vec![0],
+            downbeats: (0..n).step_by(4).collect(),
             meter: Meter {
                 beats_per_bar: 4,
                 confidence: 0.9,
@@ -269,6 +293,26 @@ mod tests {
             t += beat_period_s;
         }
         beat_grid(beats)
+    }
+
+    #[test]
+    fn snapped_boundaries_land_on_downbeats() {
+        let chroma = three_block_chroma(100);
+        let beats = beats_covering(&chroma, 0.5);
+
+        let params = SegmentParams {
+            snap_to_downbeats: true,
+            ..SegmentParams::default()
+        };
+        let snapped = segment_structure(&chroma, &beats, &params);
+        assert!(snapped.sections.len() > 1);
+        for section in &snapped.sections[1..] {
+            assert!(
+                beats.downbeats.contains(&section.start_beat),
+                "boundary at beat {} is not a downbeat",
+                section.start_beat
+            );
+        }
     }
 
     #[test]
@@ -335,7 +379,10 @@ mod tests {
         let result = segment_structure(&chroma, &beats, &SegmentParams::default());
 
         assert!(
-            result.sections.len() <= 4,
+            // The peak threshold is relative (mean + k*stddev, k = 0.5 by default),
+            // so noise-only input still yields a few peaks; this only guards
+            // against it flooding at every `min_boundary_distance_frames`.
+            result.sections.len() <= 6,
             "expected few/no spurious sections on structureless input, got {}",
             result.sections.len()
         );

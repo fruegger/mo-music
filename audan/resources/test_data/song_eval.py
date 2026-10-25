@@ -274,6 +274,24 @@ def chords_row(song: SongRecord, r: ChordsResult) -> list[str]:
 CHORDS_COLUMNS = ["Nr", "Song", "Chords_O", "Chords_C"]
 
 
+def run_struct(path: Path, audan_exe: Path, cache_dir: Path) -> list[tuple[float, float, str]]:
+    """`audan struct --format lab`: (start, end, label) per section, in
+    seconds (the JSON output only has beat indices)."""
+    cmd = [str(audan_exe), "struct", str(path), "--format", "lab", "--cache-dir", str(cache_dir)]
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+    if result.returncode != 0:
+        raise RuntimeError(f"audan exited {result.returncode}: {result.stderr.strip()[:200]}")
+    return [(float(a), float(b), label) for a, b, label in (line.split() for line in result.stdout.splitlines() if line.strip())]
+
+
+def struct_row(song: SongRecord, sections: list[tuple[float, float, str]]) -> list[str]:
+    starts = " ".join(f"{start:.0f}" for start, _, _ in sections)
+    return [str(song.nr), song.title, str(len(sections)), starts]
+
+
+STRUCT_COLUMNS = ["Nr", "Song", "Sections_C", "Starts_C(s)"]
+
+
 @dataclass
 class OpSpec:
     description: str
@@ -313,6 +331,12 @@ def build_ops() -> dict[str, OpSpec]:
             columns=KEY_COLUMNS,
             run=run_key,
             to_row=key_row,
+        ),
+        "struct": OpSpec(
+            description="audan struct (section count and start times)",
+            columns=STRUCT_COLUMNS,
+            run=run_struct,
+            to_row=struct_row,
         ),
         "chords": OpSpec(
             description="audan chords (distinct chord vocabulary used, deduped in order)",
