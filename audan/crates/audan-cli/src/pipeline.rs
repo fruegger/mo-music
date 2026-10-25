@@ -273,6 +273,10 @@ pub fn resolve_chords(
     Ok(seq)
 }
 
+/// Radius (in ~0.19 s chroma-hop frames) of the moving average over the
+/// timbre features, matching the smoothing the chroma gets for key analysis.
+const TIMBRE_SMOOTHING_FRAMES: usize = 4;
+
 #[derive(Serialize)]
 struct StructParams<'a> {
     beat_grid_key: &'a str,
@@ -285,6 +289,7 @@ struct StructParams<'a> {
     seg_peak_threshold_k: f32,
     seg_min_boundary_distance_frames: usize,
     seg_snap_to_downbeats: bool,
+    seg_timbre_weight: f32,
 }
 
 // One past clippy's limit only because of the progress reporter.
@@ -302,20 +307,25 @@ pub fn resolve_struct(
     let key = KeyDeriver::derive(
         Some(l1_key),
         &CacheLayer::L4.stage_id("struct"),
-        2,
+        3,
         &StructParams {
             beat_grid_key: &beats_key.to_hex(),
             seg_kernel_half_size: seg_params.kernel_half_size,
             seg_peak_threshold_k: seg_params.peak_threshold_k,
             seg_min_boundary_distance_frames: seg_params.min_boundary_distance_frames,
             seg_snap_to_downbeats: seg_params.snap_to_downbeats,
+            seg_timbre_weight: seg_params.timbre_weight,
         },
     );
     rep.stage(Stage::CheckingCache);
     let dto: StructureResultDto = resolver.resolve(key, || {
         rep.stage(Stage::Structure);
         let chroma = audan_dsp::key_chroma(mono, key_params);
-        let result = audan_struct::segment_structure(&chroma, grid, seg_params);
+        let timbre = (seg_params.timbre_weight > 0.0).then(|| {
+            audan_dsp::timbre_features(mono, key_params.hop, key_params.pad, TIMBRE_SMOOTHING_FRAMES)
+        });
+        let result =
+            audan_struct::segment_structure_with_timbre(&chroma, timbre.as_deref(), grid, seg_params);
         Ok(StructureResultDto::from(&result))
     })?;
     Ok(dto)

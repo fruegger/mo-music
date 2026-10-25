@@ -3,7 +3,7 @@
 //! times, so a hand-corrected beat grid re-times sections for free).
 
 use audan_core::{BeatGrid, BeatIndex, Chroma};
-use audan_dsp::chroma_ssm;
+use audan_dsp::{chroma_ssm, cosine_similarity_matrix};
 
 use crate::novelty::novelty_curve;
 
@@ -59,6 +59,10 @@ pub struct SegmentParams {
     /// MIDI-annotated songs it did not raise boundary F-measure (0.34 vs 0.35
     /// at 3 s with the DSP grid; +0.01 at 0.5 s with the `beat_this` grid).
     pub snap_to_downbeats: bool,
+    /// Share of the self-similarity matrix taken from the timbre features
+    /// (`0.0` = chroma only, `1.0` = timbre only); only used when timbre
+    /// features are passed to [`segment_structure_with_timbre`].
+    pub timbre_weight: f32,
 }
 
 impl Default for SegmentParams {
@@ -68,6 +72,7 @@ impl Default for SegmentParams {
             peak_threshold_k: 0.5,
             min_boundary_distance_frames: 24,
             snap_to_downbeats: false,
+            timbre_weight: 0.5,
         }
     }
 }
@@ -97,7 +102,17 @@ impl StructureResult {
     pub const CURRENT_SCHEMA_VERSION: u32 = 1;
 }
 
-fn pick_peaks(novelty: &[f32], threshold_k: f32, min_distance: usize) -> Vec<usize> {
+/// Peaks below this share of the kernel's total weight (`(2 * half_size)^2`)
+/// are numerical noise from a flat self-similarity matrix, not structure; the
+/// relative `mean + k * stddev` threshold alone would accept them.
+const MIN_PEAK_FRACTION: f32 = 1e-3;
+
+fn pick_peaks(
+    novelty: &[f32],
+    threshold_k: f32,
+    min_distance: usize,
+    kernel_half_size: usize,
+) -> Vec<usize> {
     let n = novelty.len();
     if n < 3 {
         return Vec::new();
@@ -105,7 +120,8 @@ fn pick_peaks(novelty: &[f32], threshold_k: f32, min_distance: usize) -> Vec<usi
 
     let mean = novelty.iter().sum::<f32>() / n as f32;
     let variance = novelty.iter().map(|v| (v - mean).powi(2)).sum::<f32>() / n as f32;
-    let threshold = mean + threshold_k * variance.sqrt();
+    let floor = MIN_PEAK_FRACTION * (2 * kernel_half_size).pow(2) as f32;
+    let threshold = (mean + threshold_k * variance.sqrt()).max(floor);
 
     let mut candidates: Vec<(usize, f32)> = (1..n - 1)
         .filter(|&i| novelty[i] >= novelty[i - 1] && novelty[i] >= novelty[i + 1])
@@ -168,6 +184,18 @@ pub fn segment_structure(
     beats: &BeatGrid,
     params: &SegmentParams,
 ) -> StructureResult {
+    segment_structure_with_timbre(chroma, None, beats, params)
+}
+
+/// Like [`segment_structure`], blending a timbre self-similarity matrix
+/// (frame-aligned with `chroma`, e.g. `audan_dsp::timbre_features` on the
+/// same hop) into the chroma one with weight `params.timbre_weight`.
+pub fn segment_structure_with_timbre(
+    chroma: &Chroma,
+    timbre: Option<&[Vec<f32>]>,
+    beats: &BeatGrid,
+    params: &SegmentParams,
+) -> StructureResult {
     if beats.beats.is_empty() || chroma.n_frames() == 0 {
         return StructureResult {
             schema_version: StructureResult::CURRENT_SCHEMA_VERSION,
@@ -176,12 +204,23 @@ pub fn segment_structure(
     }
     let last_beat = beats.beats.len() - 1;
 
-    let ssm = chroma_ssm(chroma);
+    let mut ssm = chroma_ssm(chroma);
+    if let Some(timbre) = timbre.filter(|_| params.timbre_weight > 0.0) {
+        let timbre_ssm = cosine_similarity_matrix(timbre);
+        let w = params.timbre_weight.clamp(0.0, 1.0);
+        let n = ssm.len().min(timbre_ssm.len());
+        for i in 0..n {
+            for j in 0..n {
+                ssm[i][j] = (1.0 - w) * ssm[i][j] + w * timbre_ssm[i][j];
+            }
+        }
+    }
     let novelty = novelty_curve(&ssm, params.kernel_half_size);
     let peak_frames = pick_peaks(
         &novelty,
         params.peak_threshold_k,
         params.min_boundary_distance_frames,
+        params.kernel_half_size,
     );
 
     let mut boundaries: Vec<BeatIndex> = peak_frames
@@ -293,6 +332,28 @@ mod tests {
             t += beat_period_s;
         }
         beat_grid(beats)
+    }
+
+    #[test]
+    fn timbre_alone_finds_a_boundary_chroma_cannot_see() {
+        // Constant chroma, but the timbre features change halfway.
+        let hop = 4096;
+        let grid = FrameGrid::new(22050, hop, 8192, PadMode::Reflect);
+        let n = 240;
+        let chroma = Chroma::from_frames(grid, vec![pc_vector(0, 0, 0.0); n]);
+        let timbre: Vec<Vec<f32>> = (0..n)
+            .map(|k| if k < n / 2 { vec![1.0, 0.0, 0.2] } else { vec![0.0, 1.0, 0.2] })
+            .collect();
+        let beats = beats_covering(&chroma, 0.5);
+        let params = SegmentParams::default();
+
+        let without = segment_structure(&chroma, &beats, &params);
+        let with = segment_structure_with_timbre(&chroma, Some(&timbre), &beats, &params);
+        assert_eq!(without.sections.len(), 1);
+        assert_eq!(with.sections.len(), 2);
+        let boundary = with.sections[1].start_beat as i64;
+        let expected = (chroma.grid.time_of(n / 2).as_seconds() / 0.5).round() as i64;
+        assert!((boundary - expected).abs() <= 4, "boundary {boundary}, expected {expected}");
     }
 
     #[test]

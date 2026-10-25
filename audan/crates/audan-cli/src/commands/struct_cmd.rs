@@ -22,6 +22,7 @@ pub fn run(
     seg_peak_threshold_k: Option<f32>,
     seg_min_boundary_distance: Option<usize>,
     seg_snap_downbeats: Option<bool>,
+    seg_timbre_weight: Option<f32>,
     cli: &Cli,
     resolved: &Resolved,
 ) -> anyhow::Result<()> {
@@ -60,6 +61,7 @@ pub fn run(
         min_boundary_distance_frames: seg_min_boundary_distance
             .unwrap_or(default_seg_params.min_boundary_distance_frames),
         snap_to_downbeats: seg_snap_downbeats.unwrap_or(default_seg_params.snap_to_downbeats),
+        timbre_weight: seg_timbre_weight.unwrap_or(default_seg_params.timbre_weight),
     };
 
     let result = pipeline::resolve_struct(

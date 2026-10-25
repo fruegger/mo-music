@@ -13,6 +13,7 @@ pub mod onset;
 pub mod ssm;
 pub mod stft;
 pub mod tempogram;
+pub mod timbre;
 pub mod window;
 
 pub use chroma::{chord_chroma, key_chroma, ChordChromaParams, KeyChromaParams};
@@ -21,3 +22,4 @@ pub use onset::{onset_envelope, pick_peaks, spectral_flux, OnsetEnvelope, Peak};
 pub use ssm::{chroma_ssm, cosine_similarity_matrix};
 pub use stft::Stft;
 pub use tempogram::{tempogram, Tempogram, TempogramParams};
+pub use timbre::timbre_features;

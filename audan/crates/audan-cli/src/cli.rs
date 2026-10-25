@@ -182,6 +182,13 @@ pub enum Command {
         /// library default.
         #[arg(long)]
         seg_snap_downbeats: Option<bool>,
+
+        /// Override `SegmentParams::timbre_weight` (0..=1, share of the
+        /// self-similarity matrix taken from timbre/loudness features
+        /// instead of chroma). Diagnostic/tuning knob; omit to use the
+        /// library default.
+        #[arg(long)]
+        seg_timbre_weight: Option<f32>,
     },
 
     /// Separate instrument stems (F6). Requires an explicit `--model`;

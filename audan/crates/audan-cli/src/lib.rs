@@ -42,6 +42,7 @@ pub fn run(cli: Cli) -> anyhow::Result<()> {
             seg_peak_threshold_k,
             seg_min_boundary_distance,
             seg_snap_downbeats,
+            seg_timbre_weight,
         } => commands::struct_cmd::run(
             file,
             beats.as_deref(),
@@ -49,6 +50,7 @@ pub fn run(cli: Cli) -> anyhow::Result<()> {
             *seg_peak_threshold_k,
             *seg_min_boundary_distance,
             *seg_snap_downbeats,
+            *seg_timbre_weight,
             &cli,
             &resolved,
         ),

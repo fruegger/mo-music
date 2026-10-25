@@ -19,4 +19,6 @@ pub mod novelty;
 pub mod segment;
 
 pub use novelty::novelty_curve;
-pub use segment::{segment_structure, SectionEvent, SegmentParams, StructureResult};
+pub use segment::{
+    segment_structure, segment_structure_with_timbre, SectionEvent, SegmentParams, StructureResult,
+};
