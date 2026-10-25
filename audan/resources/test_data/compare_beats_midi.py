@@ -7,18 +7,27 @@ the timeline. Each run is the JSON `audan beats --format json` printed,
 saved to a file; `--quick` runs cover only a window starting
 QUICK_SKIP_SECONDS into the track and are scored on that window alone.
 
-Standard library only:
+The annotated songs come from songs.txt/files.txt (MIDI_DIRS below);
+each gets a comparison_beats_song<N>.html and all of them a summary page,
+comparison_beats_midi.html. Standard library only:
 
-    python compare_beats_midi.py            # writes comparison_beats_song4.html
+    python compare_beats_midi.py                 # every song with run files in beats/
+    python compare_beats_midi.py --song 4 --song 2
+    python compare_beats_midi.py --library-dir <audio folder>   # also runs the missing
+                                                                # `audan beats` runs
 """
 
 import html
 import json
 import math
+import argparse
 import statistics
 import struct
+import subprocess
 import sys
 from pathlib import Path
+
+from song_eval import load_files, load_songs
 
 HERE = Path(__file__).resolve().parent
 
@@ -31,20 +40,83 @@ QUICK_WINDOW_SECONDS = 30.0
 F_TOLERANCE = 0.070
 CONTINUITY_TOLERANCE = 0.175
 
-SONG = {
-    "title": "In My Place",
-    "artist": "Coldplay",
-    "midi": HERE.parent / "songs" / "In My Place" / "In My Place.mid",
-    "out": HERE / "comparison_beats_song4.html",
-    "runs": [
-        ("DSP", HERE / "beats" / "song4.txt", False),
-        ("DSP quick", HERE / "beats" / "song4_q.txt", True),
-        ("Model", HERE / "beats" / "song4_bt.txt", False),
-        ("Model quick", HERE / "beats" / "song4_bt_q.txt", True),
-        ("Small model", HERE / "beats" / "song4_bts.txt", False),
-        ("Small quick", HERE / "beats" / "song4_bts_q.txt", True),
-    ],
+# The annotated songs: songs.txt `#` -> folder under resources/songs holding
+# "<folder>/<folder>.mid".
+MIDI_DIRS = {
+    1: "Enter Sandman",
+    2: "Rolling In the Deep",
+    3: "Crazy",
+    4: "In My Place",
+    5: "Zombie",
+    6: "Back in black",
+    7: "You Shook Me All Night Long",
+    8: "Paranoid",
+    9: "Dance With Somebody",
+    10: "Long Train Running",
+    11: "Easy",
+    12: "Bailando",
+    13: "Subeme La Radio",
+    14: "Eres Para Mi",
+    15: "Basket Case",
+    16: "Sweet Child Of Mine",
+    17: "Entre Dos Tierras",
+    18: "I Was Made For Loving You",
+    19: "Lost On You",
+    20: "Stairway To Heaven",
 }
+
+# (label, file suffix in beats/, quick?, extra `audan beats` arguments). A run
+# for song N lives in beats/songN<suffix>.txt: the JSON `audan beats` printed.
+RUN_SPECS = [
+    ("DSP", "", False, []),
+    ("DSP quick", "_q", True, []),
+    ("Model", "_bt", False, ["--model", "beat_this", "--accept-model-license"]),
+    ("Model quick", "_bt_q", True, ["--model", "beat_this", "--accept-model-license"]),
+    ("Small model", "_bts", False, ["--model", "beat_this_small", "--accept-model-license"]),
+    ("Small quick", "_bts_q", True, ["--model", "beat_this_small", "--accept-model-license"]),
+]
+
+
+def load_entries():
+    """One entry per annotated song, joining songs.txt, files.txt and the
+    MIDI folders."""
+    files = load_files()
+    entries = []
+    for rec in load_songs():
+        folder = MIDI_DIRS.get(rec.nr)
+        if folder is None:
+            continue
+        entries.append(
+            {
+                "nr": rec.nr,
+                "title": rec.title,
+                "artist": rec.artist,
+                "audio": files.get(rec.nr),
+                "midi": HERE.parent / "songs" / folder / f"{folder}.mid",
+                "out": HERE / f"comparison_beats_song{rec.nr}.html",
+                "runs": [
+                    (label, HERE / "beats" / f"song{rec.nr}{suffix}.txt", quick, args)
+                    for label, suffix, quick, args in RUN_SPECS
+                ],
+            }
+        )
+    return entries
+
+
+def generate_missing(song, library_dir, exe):
+    """Runs `audan beats` for every run of `song` that has no file yet."""
+    for label, path, quick, args in song["runs"]:
+        if path.exists():
+            continue
+        cmd = [str(exe), "beats", str(library_dir / song["audio"]), "--format", "json", *args]
+        if quick:
+            cmd.append("--quick")
+        print(f"  running {path.name} ({label})...", file=sys.stderr, flush=True)
+        result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", timeout=900)
+        if result.returncode != 0:
+            print(f"  FAILED: {result.stderr.strip()[:200]}", file=sys.stderr)
+            continue
+        path.write_text(result.stdout, encoding="utf-8")
 
 
 # --- MIDI -----------------------------------------------------------------
@@ -144,6 +216,14 @@ class TempoMap:
         return 60e6 / usec
 
 
+def beat_unit(num, den, division):
+    """(beats per bar, ticks per beat). Compound meters (6/8, 12/8, ...) beat
+    on the dotted quarter, every other meter on the denominator note."""
+    if den == 8 and num > 3 and num % 3 == 0:
+        return num // 3, division * 3 // 2
+    return num, division * 4 // den
+
+
 def reference(path):
     division, events = read_midi(path)
     tempo = TempoMap(division, events)
@@ -159,12 +239,13 @@ def reference(path):
             sig_i += 1
             num, den = sigs[sig_i][1]
             beat_in_bar = 0
+        per_bar, step = beat_unit(num, den, division)
         if beat_in_bar == 0:
             downbeats.append(len(beats))
         beats.append(tempo.seconds(tick))
         beat_ticks.append(tick)
-        beat_in_bar = (beat_in_bar + 1) % num
-        tick += division * 4 // den
+        beat_in_bar = (beat_in_bar + 1) % per_bar
+        tick += step
 
     markers = [(tempo.seconds(t), name) for t, k, name in events if k == "marker"]
     if not markers or markers[0][0] > 0:
@@ -174,10 +255,13 @@ def reference(path):
         (name, start, markers[i + 1][0] if i + 1 < len(markers) else end)
         for i, (start, name) in enumerate(markers)
     ]
+    # Slivers (e.g. a marker just before the first or after the last beat)
+    # hold no beats to score.
+    sections = [s for s in sections if any(s[1] <= b < s[2] for b in beats)]
     return {
         "beats": beats,
         "downbeats": downbeats,
-        "beats_per_bar": sigs[0][1][0],
+        "beats_per_bar": beat_unit(*sigs[0][1], division)[0],
         "bpm": [tempo.bpm_at(t) for t in beat_ticks],
         "notes": [tempo.seconds(t) for t in notes],
         "sections": sections,
@@ -456,7 +540,9 @@ def section_rows(ref, runs):
 
 def chart_data(ref, runs):
     onsets = sorted({round(t, 2) for t in ref["notes"]})
+    mid = statistics.median(ref["bpm"])
     return {
+        "tempoAxis": {"min": round(mid * 0.5), "max": round(mid * 2.2), "ticks": [round(mid), round(mid * 2)]},
         "end": ref["end"],
         "sections": [{"name": n, "start": s, "end": e} for n, s, e in ref["sections"]],
         "refBpm": [[round(t, 3), round(b, 2)] for t, b in zip(ref["beats"], ref["bpm"])],
@@ -611,9 +697,9 @@ PAGE = """<!doctype html>
             %%QUICKWIN%% and are scored on that window alone.</p>
     </header>
 
-    <p class="note"><b>Every run sits %%OFFRANGE%%&nbsp;ms after the MIDI grid.</b> The DSP and model
-        backends agree on it independently, so it is a constant shift between the MIDI and the audio,
-        not a tracking error &mdash; at &plusmn;70&nbsp;ms, raw scores are near zero for that reason alone.
+    <p class="note"><b>Runs sit %%OFFRANGE%%&nbsp;ms from the MIDI grid.</b> Where the DSP and model
+        backends agree on it, it is a constant shift between the MIDI and the audio, not a tracking
+        error &mdash; at &plusmn;70&nbsp;ms, raw scores can be near zero for that reason alone.
         All scores below are taken after removing each run's median offset; the raw F-measure is
         listed for comparison.</p>
 
@@ -772,7 +858,7 @@ function drawAll() {
   });
   lanes(document.getElementById('tempo'), {
     label: 'Local tempo over time, one lane per run, against the MIDI tempo map',
-    laneH: 64, ymin: 40, ymax: 160, ticks: [72, 144], rug: false,
+    laneH: 64, ymin: D.tempoAxis.min, ymax: D.tempoAxis.max, ticks: D.tempoAxis.ticks, rug: false,
     tickLabel: v => v,
     laneNote: () => 'BPM',
     drawLane: (run, i, x, y, top, color) => {
@@ -799,13 +885,110 @@ window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer
 """
 
 
-if __name__ == "__main__":
-    ref, runs = analyse(SONG)
-    SONG["out"].write_text(render(SONG, ref, runs), encoding="utf-8")
-    for r in runs:
-        print(
-            f"{r['label']:12} offset {r['offset'] * 1000:+4.0f} ms  F {r['f_shifted']:.2f} "
-            f"(raw {r['f']:.2f})  CMLt {r['cmlt']:.2f}  downbeat F {r['down_f']:.2f}  "
-            f"{r['bpm']:.1f} BPM  {r['meter']}/4"
+def summary_page(rows, labels):
+    """`rows`: (song, runs by label) per analysed song."""
+    style = PAGE.split("<style>")[1].split("</style>")[0]
+    head = "".join(
+        f'<th class="num{" sep" if i == 0 else ""}">{html.escape(l)}</th>' for i, l in enumerate(labels)
+    )
+
+    def table(cell, better, fmt):
+        body, columns = [], [[] for _ in labels]
+        for song, runs in rows:
+            vals = [cell(runs.get(l)) for l in labels]
+            for col, v in zip(columns, vals):
+                if v is not None:
+                    col.append(v)
+            classes = mark_extremes(vals, better)
+            cells = "".join(
+                f'<td class="num {c}{" sep" if j == 0 else ""}">'
+                + ("&ndash;" if v is None else f'<span class="v">{v:{fmt}}</span>')
+                + "</td>"
+                for j, (v, c) in enumerate(zip(vals, classes))
+            )
+            body.append(
+                f'<tr><td class="nr">{song["nr"]}</td><td class="song">'
+                f'<a href="{song["out"].name}">{html.escape(song["title"])}</a></td>'
+                f'<td class="ref">{html.escape(song["artist"])}</td>{cells}</tr>'
+            )
+        means = "".join(
+            f'<td class="num{" sep" if j == 0 else ""}"><b>'
+            + (f"{statistics.mean(c):{fmt}}" if c else "&ndash;")
+            + "</b></td>"
+            for j, c in enumerate(columns)
         )
-    print(f"wrote {SONG['out']}")
+        body.append(f'<tr><td></td><td class="song">Mean</td><td></td>{means}</tr>')
+        return "\n".join(body)
+
+    def section(title, caption, cell, better, fmt):
+        return (
+            f'<h3>{title}</h3><p class="cap">{caption}</p><div class="scroll"><table><thead><tr>'
+            f"<th>#</th><th>Song</th><th>Artist</th>{head}</tr></thead>"
+            f"<tbody>{table(cell, better, fmt)}</tbody></table></div>"
+        )
+
+    def get(key):
+        return lambda r: None if r is None else r[key]
+
+    def tempo_err(r):
+        return None if r is None else abs(r["bpm"] / r["ref_bpm"] - 1) * 100
+
+    return (
+        '<!doctype html><html lang="en"><head><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width, initial-scale=1">'
+        f"<title>Beats vs. MIDI</title><style>{style} a {{ color:inherit; }}</style></head>"
+        '<body><div class="wrap"><header><h1>Beat tracking against the MIDI references</h1>'
+        f"<p>{len(rows)} annotated songs, every <code>audan beats</code> run scored against its MIDI "
+        "track. Quick runs are scored on their 30&nbsp;s window only; scores are taken after removing "
+        "each run's median offset to the MIDI grid. Click a song for its timing and tempo charts.</p>"
+        "</header>"
+        + section("Beat F-measure", "&plusmn;70&nbsp;ms. Higher is better.", get("f_shifted"), lambda v: v, ".2f")
+        + section("Any metrical level", "Best F-measure over same, double, half and off-beat levels.",
+                  get("f_any_level"), lambda v: v, ".2f")
+        + section("Continuity (CMLt)", "Share of MIDI beats tracked continuously.", get("cmlt"), lambda v: v, ".2f")
+        + section("Downbeat F-measure", "Bar starts only.", get("down_f"), lambda v: v, ".2f")
+        + section("Tempo error", "|detected median BPM / MIDI median BPM &minus; 1| in percent. Lower is better.",
+                  tempo_err, lambda v: -v, ".1f")
+        + "</div></body></html>"
+    )
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--song", type=int, action="append", help="only this songs.txt # (repeatable)")
+    parser.add_argument("--library-dir", type=Path, help="audio folder; runs `audan beats` for runs missing in beats/")
+    parser.add_argument("--exe", type=Path, default=HERE.parent.parent / "target" / "release" / "audan.exe")
+    args = parser.parse_args()
+
+    summary = []
+    for song in load_entries():
+        if args.song and song["nr"] not in args.song:
+            continue
+        print(f"#{song['nr']} {song['title']}", file=sys.stderr)
+        if args.library_dir:
+            generate_missing(song, args.library_dir, args.exe)
+        song["runs"] = [r[:3] for r in song["runs"] if r[1].exists()]
+        if not song["runs"]:
+            print("  no runs in beats/, skipped", file=sys.stderr)
+            continue
+        try:
+            ref, runs = analyse(song)
+        except (OSError, ValueError, IndexError, KeyError, statistics.StatisticsError) as e:
+            print(f"  FAILED: {e!r}", file=sys.stderr)
+            continue
+        song["out"].write_text(render(song, ref, runs), encoding="utf-8")
+        summary.append((song, {r["label"]: r for r in runs}))
+        for r in runs:
+            print(
+                f"  {r['label']:12} offset {r['offset'] * 1000:+4.0f} ms  F {r['f_shifted']:.2f} "
+                f"(raw {r['f']:.2f})  CMLt {r['cmlt']:.2f}  downbeat F {r['down_f']:.2f}  "
+                f"{r['bpm']:.1f} BPM  {r['meter']}/4"
+            )
+    if summary:
+        out = HERE / "comparison_beats_midi.html"
+        out.write_text(summary_page(summary, [spec[0] for spec in RUN_SPECS]), encoding="utf-8")
+        print(f"wrote {out} and {len(summary)} song pages")
+
+
+if __name__ == "__main__":
+    main()
