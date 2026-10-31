@@ -1,0 +1,34 @@
+task: separation
+sources: ../repo/prototype/sources.log
+out_dir: runs/separation-baseline
+
+datasets:            # name as in sources.log, split
+  - {name: slakh2100, train_split: train, val_split: validation}
+
+separation:
+  source_set: musdb4   # drums, bass, vocals, other  (or: classes)
+  n_fft: 2048
+  hop: 512
+  base_channels: 16
+  depth: 3
+
+mix:
+  seconds: 6.0
+  gain_db_range: [-12.0, 6.0]
+  p_stem_dropped: 0.15
+  effects: true
+  p_tempo: 0.2
+  tempo_ratio_range: [0.85, 1.15]
+  p_pitch: 0.2
+  pitch_semitones_range: [-3.0, 3.0]
+  pitch_drums: false
+
+train:
+  epochs: 20
+  steps_per_epoch: 300
+  batch_size: 8
+  lr: 0.001
+  num_workers: 4
+  val_snippets: 100
+  val_seed_base: 1000000
+  seed: 0

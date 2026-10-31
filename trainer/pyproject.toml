@@ -8,11 +8,12 @@ dependencies = [
     "torch",
     "torchaudio",
     "onnx",
+    "onnxscript",  # torch.onnx.export needs it
     "pyyaml",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest"]
+dev = ["pytest", "onnxruntime"]
 
 [project.scripts]
 trainer = "trainer.train:main"
