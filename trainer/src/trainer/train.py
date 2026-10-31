@@ -119,11 +119,12 @@ TASKS = {"instruments": InstrumentTask, "separation": SeparationTask}
 
 
 def fit(task, model, train_loader, val_loader, epochs: int, steps_per_epoch: int, lr: float, device: str,
-        on_epoch=None) -> list[dict]:
-    """The training loop, separated from the data setup so it can be tested on small loaders."""
-    optimiser = torch.optim.Adam(model.parameters(), lr=lr)
-    history = []
-    for epoch in range(epochs):
+        on_epoch=None, optimiser=None, start_epoch: int = 0, history=None, on_epoch_end=None) -> list[dict]:
+    """The training loop, separated from the data setup so it can be tested on small loaders.
+    Runs epochs `start_epoch .. epochs - 1`; `history` is what earlier epochs reported."""
+    optimiser = optimiser or torch.optim.Adam(model.parameters(), lr=lr)
+    history = list(history or [])
+    for epoch in range(start_epoch, epochs):
         if on_epoch is not None:
             on_epoch(epoch)
         model.train()
@@ -135,13 +136,39 @@ def fit(task, model, train_loader, val_loader, epochs: int, steps_per_epoch: int
             loss.backward()
             optimiser.step()
         history.append({"epoch": epoch, "train_loss": float(loss.detach()), **task.evaluate(model, val_loader, device)})
-        print(json.dumps(history[-1]))
+        print(json.dumps(history[-1]), flush=True)
+        if on_epoch_end is not None:
+            on_epoch_end(epoch, history, optimiser)
     return history
+
+
+def save_checkpoint(path: Path, model, optimiser, epochs_done: int, history: list[dict]) -> None:
+    """Everything needed to continue: weights, optimiser state, finished epochs, their results."""
+    tmp = path.with_suffix(".tmp")
+    torch.save({"model": model.state_dict(), "optimizer": optimiser.state_dict(), "epoch": epochs_done, "history": history}, tmp)
+    tmp.replace(path)  # never leave a half-written checkpoint behind if the process is killed
+
+
+def load_checkpoint(path: Path, model, optimiser=None, epochs_done: int | None = None) -> tuple[int, list[dict]]:
+    """Loads a `save_checkpoint` file, or a bare `model.pt` state dict (weights only: the optimiser
+    starts fresh and `epochs_done` says how many epochs it stands for). Returns `(epochs done, history)`."""
+    data = torch.load(path, map_location="cpu")
+    if "model" in data:
+        model.load_state_dict(data["model"])
+        if optimiser is not None:
+            optimiser.load_state_dict(data["optimizer"])
+        return data["epoch"], data["history"]
+    if epochs_done is None:
+        raise ValueError(f"{path} holds weights only: say how many epochs it stands for (--start-epoch)")
+    model.load_state_dict(data)
+    return epochs_done, []
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(prog="trainer")
     parser.add_argument("--config", type=Path, default=Path("configs/default.yaml"))
+    parser.add_argument("--resume", type=Path, help="checkpoint.pt to continue from (or a bare model.pt, with --start-epoch)")
+    parser.add_argument("--start-epoch", type=int, help="epochs already done when resuming from a bare model.pt")
     args = parser.parse_args(argv)
     cfg = yaml.safe_load(args.config.read_text(encoding="utf-8"))
     t = cfg["train"]
@@ -164,30 +191,49 @@ def main(argv=None):
             for ds, d in datasets
         ]
     )
-    train_loader = DataLoader(train_set, t["batch_size"], shuffle=True, num_workers=t["num_workers"], drop_last=True)
-    val_loader = DataLoader(val_set, t["batch_size"], num_workers=t["num_workers"])
+    # Persistent workers: each lists the tracks once (a minute for Slakh's train split), not every epoch.
+    workers = {"num_workers": t["num_workers"], "persistent_workers": t["num_workers"] > 0}
+    if t["num_workers"] > 0 and "prefetch_factor" in t:
+        workers["prefetch_factor"] = t["prefetch_factor"]
+    train_loader = DataLoader(train_set, t["batch_size"], shuffle=True, drop_last=True, **workers)
+    val_loader = DataLoader(val_set, t["batch_size"], **workers)
 
     model = task.build().to(device)
+    optimiser = torch.optim.Adam(model.parameters(), lr=t["lr"])
     out = Path(cfg["out_dir"])
     out.mkdir(parents=True, exist_ok=True)
+
+    start_epoch, history = 0, []
+    if args.resume:
+        start_epoch, history = load_checkpoint(args.resume, model, optimiser, args.start_epoch)
+        print(f"resumed from {args.resume}: {start_epoch} epochs done, continuing to {t['epochs']}", flush=True)
+
+    def run_record(finished: bool, history: list[dict]) -> dict:
+        return {
+            "task": task.name,
+            "finished": finished,
+            "resumed_from": str(args.resume) if args.resume else None,
+            "epochs_before_resume": start_epoch,
+            "config": cfg,
+            "history": history,
+            "licenses": {ds.name: ds.license for ds, _ in datasets},
+            "non_commercial": any(ds.non_commercial for ds, _ in datasets),
+        }
 
     def on_epoch(epoch):
         for d in train_set.datasets:
             d.set_epoch(epoch)
-        if epoch:
-            torch.save(model.state_dict(), out / "model.pt")
 
-    history = fit(task, model, train_loader, val_loader, t["epochs"], t["steps_per_epoch"], t["lr"], device, on_epoch)
-    torch.save(model.state_dict(), out / "model.pt")
+    def on_epoch_end(epoch, history, optimiser):
+        # After every epoch: a killed run loses at most one epoch.
+        save_checkpoint(out / "checkpoint.pt", model, optimiser, epoch + 1, history)
+        torch.save(model.state_dict(), out / "model.pt")
+        (out / "run.json").write_text(json.dumps(run_record(False, history), indent=1), encoding="utf-8")
+
+    history = fit(task, model, train_loader, val_loader, t["epochs"], t["steps_per_epoch"], t["lr"], device,
+                  on_epoch, optimiser, start_epoch, history, on_epoch_end)
     task.export(model, out / "model.onnx", mix)
-    run = {
-        "task": task.name,
-        "config": cfg,
-        "history": history,
-        "licenses": {ds.name: ds.license for ds, _ in datasets},
-        "non_commercial": any(ds.non_commercial for ds, _ in datasets),
-    }
-    (out / "run.json").write_text(json.dumps(run, indent=1), encoding="utf-8")
+    (out / "run.json").write_text(json.dumps(run_record(True, history), indent=1), encoding="utf-8")
 
 
 if __name__ == "__main__":

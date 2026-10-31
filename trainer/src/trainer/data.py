@@ -40,7 +40,14 @@ class SnippetDataset(Dataset):
 
     Item `i` uses track `i % n_tracks` and seed `seed_base + i + epoch * length`
     (set `epoch` via `set_epoch` for training; leave at 0 for fixed validation
-    sets). An item is a dict of tensors, by task:
+    sets). The epoch lives in shared memory, so `set_epoch` reaches persistent
+    DataLoader workers too.
+
+    Tracks come either as `tracks` (any iterable; not picklable, so only for
+    `num_workers=0`) or as `source=(dataset name, path, split)`, which each
+    worker process turns into tracks itself on first use: this is what makes the
+    dataset picklable for the spawn start method (Windows). An item is a dict of
+    tensors, by task:
 
     * `instruments`: `mono` `(T,)`, `instruments` `(n_classes,)`, `instruments_mask`
     * `separation`: `mix` `(2, T)`, `sources` `(n_sources, 2, T)`, `sources_mask`
@@ -48,21 +55,40 @@ class SnippetDataset(Dataset):
     """
 
     def __init__(self, tracks, config: MixConfig, length: int, seed_base: int = 0,
-                 tasks=("instruments",), source_set: str = "musdb4"):
-        self.tracks = list(tracks)
+                 tasks=("instruments",), source_set: str = "musdb4", source=None):
+        self._tracks = None if tracks is None else list(tracks)
+        self.source = source
         self.config = config
         self.length = length
         self.seed_base = seed_base
         self.tasks = tuple(tasks)
         self.source_set = source_set
-        self.epoch = 0
+        self._epoch = torch.zeros(1, dtype=torch.long).share_memory_()
 
     @classmethod
     def from_dataset(cls, dataset, split, config, length, seed_base=0, **kwargs):
-        return cls(iter_tracks(dataset.name, dataset.path, split), config, length, seed_base, **kwargs)
+        """Lazy: the tracks are listed on first use, in whichever process that is."""
+        return cls(None, config, length, seed_base, source=(dataset.name, str(dataset.path), split), **kwargs)
+
+    @property
+    def tracks(self) -> list:
+        if self._tracks is None:
+            name, path, split = self.source
+            self._tracks = list(iter_tracks(name, path, split))
+        return self._tracks
+
+    def __getstate__(self):
+        state = dict(self.__dict__)
+        if self.source is not None:
+            state["_tracks"] = None  # tracks hold closures; a worker lists its own
+        return state
+
+    @property
+    def epoch(self) -> int:
+        return int(self._epoch[0])
 
     def set_epoch(self, epoch: int) -> None:
-        self.epoch = epoch
+        self._epoch[0] = epoch
 
     def __len__(self) -> int:
         return self.length

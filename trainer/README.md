@@ -62,13 +62,51 @@ are tested against PyTorch with onnxruntime. The exporter needs `onnxscript`.
 - each run writes `run.json` with the dataset licences from `sources.log`; a
   run that used MUSDB18 is marked `non_commercial`
 
+## First separation run (CPU)
+
+`configs/separation-cpu.yaml`: 3-second snippets with effects (no tempo/pitch),
+`musdb4` sources, a 0.27M-parameter separator (n_fft 2048, hop 1024), batch 8,
+150 steps per epoch. Trained on Slakh2100 train, scored on 48 fixed validation
+snippets. It ran on an 8-core CPU without a GPU and was stopped by the system
+twice for low memory, so only 4 of the planned 10 epochs (600 steps) finished.
+
+SI-SDR improvement over using the mixture as the estimate (dB):
+
+| epoch | drums | bass | other | mean |
+|---|---|---|---|---|
+| 0 | +4.0 | +6.8 | -1.5 | +3.1 |
+| 1 | +10.1 | +8.4 | -0.5 | +6.0 |
+| 2 | +9.6 | +7.7 | -1.1 | +5.4 |
+| 3 | +10.6 | +8.0 | -1.0 | +5.9 |
+
+Vocals are not scored (Slakh has none). Bass is still at -3 dB SI-SDR
+(improved, not separated); `other` is not better than the mixture. The run had
+levelled off at about +6 dB, and 48 validation snippets are noisy, so read the
+epochs 1-3 differences as noise. This shows that the pipeline learns on real
+Slakh material; it is not a useful separator. That needs a GPU, more steps,
+a larger model, and MUSDB18 in the mix.
+
+## Resuming and long runs
+
+`trainer --config ... --resume runs/<run>/checkpoint.pt` continues exactly
+(weights, optimiser, epoch count, results so far). A checkpoint and
+`run.json` (`finished: false` until the end) are written after every epoch, so a
+killed run loses at most one epoch. A bare `model.pt` also resumes, with
+`--start-epoch N` for the epochs it stands for; the optimiser then starts fresh.
+
+On Windows the DataLoader workers pickle the dataset, so a dataset made with
+`from_dataset` lists its own tracks inside each worker (about a minute for
+Slakh's train split per worker) and `set_epoch` reaches persistent workers
+through shared memory. Each worker costs memory; on a 16 GB machine with a
+busy desktop, 2-3 workers ran it out of memory.
+
 ## Status and notes
 
 - Building the track list reads every track's metadata: about a minute for
-  Slakh's train split at start-up.
-- Only a few training steps have been run (in tests). No separation quality
-  has been measured: the model, loss and metric are verified on synthetic
-  material (a tiny model learns two synthetic sources and improves SI-SDR over
-  the mixture), not on real music.
+  Slakh's train split at start-up, once per worker.
+- Separation quality beyond the run above has not been measured; the model, loss
+  and metric are also verified on synthetic material (a tiny model learns two
+  synthetic sources and improves SI-SDR over the mixture).
 - Open: onset head, an STFT-free export for runtimes without an FFT, MUSDB18
-  in the separation config (needs `mixer prepare-musdb` first).
+  in the separation config (needs `mixer prepare-musdb` first), tempo/pitch
+  augmentation in training (too slow on CPU).

@@ -91,3 +91,28 @@ def test_unknown_source_set_is_an_error():
     snippet = render_snippet(synthetic_track(), 0, CONFIG)
     with pytest.raises(KeyError):
         group_sources(snippet.stems, snippet.labels, "nope")
+
+
+SLAKH = __import__("pathlib").Path(r"C:/workarea/slakh2100")
+
+
+@pytest.mark.skipif(not (SLAKH / "validation").exists(), reason="Slakh2100 not available")
+def test_worker_processes_build_their_own_tracks_and_see_the_epoch():
+    """Windows starts workers by pickling the dataset: it must pickle, and a
+    set_epoch in the main process must reach persistent workers."""
+    import pickle
+
+    from mixer import Dataset
+
+    dataset = Dataset("slakh2100", "", SLAKH, "", "CC BY 4.0")
+    ds = SnippetDataset.from_dataset(
+        dataset, "validation", MixConfig(seconds=0.5, effects=False), 4, tasks=("separation",)
+    )
+    assert pickle.loads(pickle.dumps(ds)).source == ds.source
+    loader = torch.utils.data.DataLoader(ds, batch_size=2, num_workers=2, persistent_workers=True)
+    epoch0 = [b["mix"].clone() for b in loader]
+    again = [b["mix"].clone() for b in loader]
+    assert all(torch.equal(a, b) for a, b in zip(epoch0, again))  # same epoch, same mixes
+    ds.set_epoch(1)
+    epoch1 = [b["mix"].clone() for b in loader]
+    assert not any(torch.equal(a, b) for a, b in zip(epoch0, epoch1))

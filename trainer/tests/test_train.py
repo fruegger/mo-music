@@ -82,3 +82,47 @@ def test_main_end_to_end_on_slakh(tmp_path, task_name, extra):
     run = json.loads((tmp_path / "run" / "run.json").read_text())
     assert run["task"] == task_name and run["licenses"]["slakh2100"] and run["non_commercial"] is False
     assert (tmp_path / "run" / "model.pt").exists() and (tmp_path / "run" / "model.onnx").exists()
+
+
+def test_resume_continues_where_a_checkpoint_stopped(tmp_path):
+    from trainer.train import load_checkpoint, save_checkpoint
+
+    torch.manual_seed(0)
+    task = SeparationTask(SEP_CFG)
+    train, val = loaders(task)
+    model = task.build()
+    saved = []
+
+    def save(epoch, history, optimiser):
+        save_checkpoint(tmp_path / "checkpoint.pt", model, optimiser, epoch + 1, history)
+        saved.append(epoch)
+
+    optimiser = torch.optim.Adam(model.parameters(), lr=1e-3)
+    fit(task, model, train, val, epochs=1, steps_per_epoch=2, lr=1e-3, device="cpu", optimiser=optimiser, on_epoch_end=save)
+    assert saved == [0] and not (tmp_path / "checkpoint.tmp").exists()
+
+    fresh = task.build()
+    fresh_opt = torch.optim.Adam(fresh.parameters(), lr=1e-3)
+    done, history = load_checkpoint(tmp_path / "checkpoint.pt", fresh, fresh_opt)
+    assert done == 1 and [h["epoch"] for h in history] == [0]
+    assert all(torch.equal(a, b) for a, b in zip(model.state_dict().values(), fresh.state_dict().values()))
+    assert len(fresh_opt.state_dict()["state"]) == len(optimiser.state_dict()["state"]) > 0
+
+    seen = []
+    history = fit(task, fresh, train, val, epochs=3, steps_per_epoch=2, lr=1e-3, device="cpu",
+                  on_epoch=seen.append, optimiser=fresh_opt, start_epoch=done, history=history)
+    assert seen == [1, 2] and [h["epoch"] for h in history] == [0, 1, 2]
+
+
+def test_resume_from_bare_weights_needs_the_epoch_count(tmp_path):
+    from trainer.train import load_checkpoint
+
+    task = SeparationTask(SEP_CFG)
+    model = task.build()
+    torch.save(model.state_dict(), tmp_path / "model.pt")
+    other = task.build()
+    with pytest.raises(ValueError, match="start-epoch"):
+        load_checkpoint(tmp_path / "model.pt", other)
+    done, history = load_checkpoint(tmp_path / "model.pt", other, epochs_done=2)
+    assert done == 2 and history == []
+    assert all(torch.equal(a, b) for a, b in zip(model.state_dict().values(), other.state_dict().values()))
