@@ -84,6 +84,37 @@ def test_prepared_and_raw_layouts_agree(musdb_root, tmp_path):
         assert np.allclose(a.onsets(), b.onsets(), atol=0.001)
 
 
+def two_track_copy(musdb_root, tmp_path):
+    """A private copy of the fixture with a second track, so other tests keep their single one."""
+    import shutil
+
+    raw = tmp_path / "raw"
+    shutil.copytree(musdb_root, raw)
+    shutil.copy(raw / "train" / "Fake Artist - Fake Song.stem.mp4", raw / "train" / "Second Artist - Second Song.stem.mp4")
+    return raw, tmp_path / "prepared"
+
+
+def test_prepare_continues_after_an_interruption(musdb_root, tmp_path):
+    musdb_root, tmp_path = two_track_copy(musdb_root, tmp_path)
+    assert prepare_musdb(musdb_root, tmp_path, splits=("train",), limit=1) == 1  # as if stopped after one track
+    first = sorted(p.name for p in (tmp_path / "train").iterdir())
+    assert len(first) == 1
+    stamp = (tmp_path / "train" / first[0] / "onsets.json").stat().st_mtime_ns
+
+    assert prepare_musdb(musdb_root, tmp_path, splits=("train",)) == 1  # only the missing track is decoded
+    assert len(list((tmp_path / "train").iterdir())) == 2
+    assert (tmp_path / "train" / first[0] / "onsets.json").stat().st_mtime_ns == stamp  # the finished one was left alone
+    assert prepare_musdb(musdb_root, tmp_path, splits=("train",)) == 0
+    assert prepare_musdb(musdb_root, tmp_path, splits=("train",), force=True) == 2
+
+
+def test_an_unfinished_track_is_redone(musdb_root, tmp_path):
+    musdb_root, tmp_path = two_track_copy(musdb_root, tmp_path)
+    prepare_musdb(musdb_root, tmp_path, splits=("train",), limit=1)
+    (next((tmp_path / "train").iterdir()) / "onsets.json").unlink()  # killed before the last file was written
+    assert prepare_musdb(musdb_root, tmp_path, splits=("train",), limit=1) == 1
+
+
 def test_the_prepared_folder_has_its_own_dataset_name(musdb_root, tmp_path):
     prepare_musdb(musdb_root, tmp_path, splits=("train",))
     assert [t.name for t in iter_tracks("musdb18-prepared", tmp_path, "train")] == ["Fake Artist - Fake Song"]

@@ -81,7 +81,9 @@ One JSON object per snippet; the full field list is the docstring of
   as negatives.
 - **Preparing MUSDB18:** `mixer prepare-musdb --src <MUSDB18> --dst <dir>` decodes
   each track once (PyAV, no ffmpeg needed) into FLAC stems plus `onsets.json`
-  (about 10-30 s per track), so training reads them like Slakh. Point the
+  (a few seconds to a minute per track; all 150 take under an hour), so training
+  reads them like Slakh. It prints progress and skips tracks that are already
+  done, so an interrupted run continues where it stopped (`--force` redoes all). Point the
   `MUSDB18-prepared` line of `sources.log` at the prepared folder (the dataset name
   `musdb18-prepared` uses the same loader; the `MUSDB18` line keeps the original path). The original
   `.stem.mp4` files also load directly, but decoding a track takes seconds, so

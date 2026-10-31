@@ -37,11 +37,12 @@ def main(argv=None):
     prepare.add_argument("--src", type=Path, required=True, help="MUSDB18 folder with train/ and test/")
     prepare.add_argument("--dst", type=Path, required=True)
     prepare.add_argument("--splits", nargs="+", default=["train", "test"])
-    prepare.add_argument("--limit", type=int, help="only the first N tracks")
+    prepare.add_argument("--limit", type=int, help="decode at most N tracks in this run")
+    prepare.add_argument("--force", action="store_true", help="redo tracks that are already prepared")
     args = parser.parse_args(argv)
 
     if args.cmd == "prepare-musdb":
-        n = prepare_musdb(args.src, args.dst, tuple(args.splits), args.limit)
+        n = prepare_musdb(args.src, args.dst, tuple(args.splits), args.limit, args.force, verbose=True)
         print(f"prepared {n} tracks in {args.dst}")
         return
 

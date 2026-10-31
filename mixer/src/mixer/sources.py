@@ -132,16 +132,27 @@ def estimate_onsets(audio: np.ndarray, sample_rate: int) -> np.ndarray:
     return onset_detect.detect_onsets(audio, sample_rate)
 
 
-def prepare_musdb(src: Path, dst: Path, splits=("train", "test"), limit: int | None = None) -> int:
+def prepare_musdb(src: Path, dst: Path, splits=("train", "test"), limit: int | None = None,
+                  force: bool = False, verbose: bool = False) -> int:
     """Decodes MUSDB18 once into `dst/<split>/<track>/{drums,bass,other,vocals}.flac`
     plus `onsets.json` (onsets estimated from each stem's energy), so training
-    reads stems by random access like Slakh. Returns the number of tracks."""
+    reads stems by random access like Slakh. `onsets.json` is written last, so a
+    track that has it is finished: an interrupted run continues where it stopped
+    (`force` redoes everything). `limit` counts tracks decoded in this call.
+    Returns the number of tracks decoded."""
     done = 0
     for split in splits:
-        for path in sorted((Path(src) / split).glob("*.stem.mp4")):
+        paths = sorted((Path(src) / split).glob("*.stem.mp4"))
+        for i, path in enumerate(paths, start=1):
             if limit is not None and done >= limit:
                 return done
             out = Path(dst) / split / path.name.removesuffix(".stem.mp4")
+            if (out / ONSETS_FILE).exists() and not force:
+                if verbose:
+                    print(f"[{split} {i}/{len(paths)}] {out.name}: already done", flush=True)
+                continue
+            if verbose:
+                print(f"[{split} {i}/{len(paths)}] {out.name}", flush=True)
             out.mkdir(parents=True, exist_ok=True)
             stems, rate = decode_musdb(path)
             onsets = {}
