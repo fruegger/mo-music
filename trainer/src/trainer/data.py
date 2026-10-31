@@ -6,7 +6,7 @@ from mixer import CLASSES, MixConfig, iter_tracks, render_snippet
 from mixer.vocab import EXACT_IN_MUSDB
 from torch.utils.data import Dataset
 
-from .sources import group_sources
+from .sources import group_sources, source_names
 
 CLASS_INDEX = {c: i for i, c in enumerate(CLASSES)}
 
@@ -107,4 +107,41 @@ class SnippetDataset(Dataset):
             item["mix"] = torch.from_numpy(np.ascontiguousarray(as_stereo(snippet.mix).T))
             item["sources"] = torch.from_numpy(np.ascontiguousarray(sources.transpose(0, 2, 1)))
             item["sources_mask"] = torch.from_numpy(mask)
+        return item
+
+
+class VocalMixDataset(Dataset):
+    """Wraps a separation dataset that has no vocals (Slakh2100) and, with probability `p`,
+    adds the vocals of a snippet from `vocals` (a MUSDB18 `SnippetDataset`) to the mix and to
+    the `vocals` target. Both datasets must render the same snippet length at the same sample
+    rate. Deterministic in (index, epoch); `set_epoch` reaches both wrapped datasets."""
+
+    def __init__(self, base: Dataset, vocals: SnippetDataset, p: float = 0.5,
+                 gain_db_range=(-6.0, 6.0), seed_base: int = 0, source_set: str = "musdb4", peak: float = 0.95):
+        if len(vocals) < len(base):
+            raise ValueError("the vocals dataset must be at least as long as the base dataset")
+        self.base, self.vocals, self.p = base, vocals, p
+        self.gain_db_range, self.seed_base, self.peak = tuple(gain_db_range), seed_base, peak
+        self.vocal_index = source_names(source_set).index("vocals")
+
+    def set_epoch(self, epoch: int) -> None:
+        self.base.set_epoch(epoch)
+        self.vocals.set_epoch(epoch)
+
+    def __len__(self) -> int:
+        return len(self.base)
+
+    def __getitem__(self, i: int) -> dict:
+        item = dict(self.base[i])
+        rng = np.random.default_rng([self.seed_base, i, self.base.epoch])
+        add, gain_db = rng.random() < self.p, rng.uniform(*self.gain_db_range)  # always two draws
+        if not add:
+            return item
+        voice = self.vocals[i]["sources"][self.vocal_index] * 10.0 ** (gain_db / 20.0)
+        mix, sources = item["mix"] + voice, item["sources"].clone()
+        sources[self.vocal_index] += voice
+        scale = min(1.0, self.peak / max(float(mix.abs().max()), 1e-9))
+        item["mix"], item["sources"] = mix * scale, sources * scale
+        item["sources_mask"] = item["sources_mask"].clone()
+        item["sources_mask"][self.vocal_index] = 1.0
         return item

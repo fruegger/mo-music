@@ -1,0 +1,45 @@
+# separation-cpu-musdb-vocals.yaml plus Slakh2100, with the vocals of MUSDB18 mixed into 70% of the
+# Slakh snippets (Slakh has no vocals of its own). With the plain MUSDB18 half of the batches that
+# puts vocals in roughly 75% of all snippets, like typical pop / rock / folk / rap. Slakh gives
+# clean instrument targets, the mixed-in vocals give a clean vocal target; the plain MUSDB18
+# batches keep the model on real mixes.
+# Needs MUSDB18 prepared: `mixer prepare-musdb --src ... --dst C:/workarea/MUSDB18_prepared`.
+# Anything trained on MUSDB18 is non-commercial.
+task: separation
+sources: ../repo/prototype/sources.log
+out_dir: runs/separation-cpu-vocalmix-1
+
+datasets:
+  - name: slakh2100
+    train_split: train
+    val_split: validation
+    weight: 1.0
+    vocal_mix: {from: musdb18-prepared, split: train, p: 0.7, gain_db_range: [-6.0, 6.0]}
+  - {name: musdb18-prepared, train_split: train, val_split: test, weight: 1.0}   # MUSDB18 has no validation split
+
+separation:
+  source_set: musdb4
+  n_fft: 2048
+  hop: 1024
+  base_channels: 12
+  depth: 3
+  source_weights: {vocals: 4.0}
+
+mix:
+  seconds: 3.0
+  gain_db_range: [-12.0, 6.0]
+  p_stem_dropped: 0.15
+  effects: true
+  p_tempo: 0.0
+  p_pitch: 0.0
+
+train:
+  epochs: 8
+  steps_per_epoch: 150
+  batch_size: 8
+  lr: 0.002
+  num_workers: 2
+  prefetch_factor: 1
+  val_snippets: 48
+  val_seed_base: 1000000
+  seed: 0

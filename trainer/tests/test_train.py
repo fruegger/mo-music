@@ -126,3 +126,10 @@ def test_resume_from_bare_weights_needs_the_epoch_count(tmp_path):
     done, history = load_checkpoint(tmp_path / "model.pt", other, epochs_done=2)
     assert done == 2 and history == []
     assert all(torch.equal(a, b) for a, b in zip(model.state_dict().values(), other.state_dict().values()))
+
+
+def test_source_weights_scale_the_loss_per_source():
+    task = SeparationTask({"separation": {"source_set": "musdb4", "source_weights": {"vocals": 3.0}}})
+    assert task.source_weights.tolist() == [1.0, 1.0, 3.0, 1.0]
+    with pytest.raises(ValueError):
+        SeparationTask({"separation": {"source_set": "musdb4", "source_weights": {"piano": 2.0}}})

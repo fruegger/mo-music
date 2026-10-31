@@ -13,7 +13,7 @@ from mixer import MixConfig, load_registry
 from torch import nn
 from torch.utils.data import ConcatDataset, DataLoader
 
-from .data import SnippetDataset
+from .data import SnippetDataset, VocalMixDataset
 from .model import InstrumentCnn
 from .separation import Separator, evaluate_separation, separation_loss
 from .sources import source_names
@@ -66,6 +66,13 @@ class SeparationTask:
         self.cfg = cfg
         self.sep = {"source_set": "musdb4", "n_fft": 2048, "hop": 512, "base_channels": 16, "depth": 3, **cfg.get("separation", {})}
         self.dataset_kwargs = {"source_set": self.sep["source_set"]}
+        # Optional per-source loss weights ({name: weight}, default 1), e.g. to favour vocals.
+        names = source_names(self.sep["source_set"])
+        weights = self.sep.get("source_weights", {})
+        unknown = set(weights) - set(names)
+        if unknown:
+            raise ValueError(f"source_weights names unknown sources {sorted(unknown)}; the set has {names}")
+        self.source_weights = torch.tensor([float(weights.get(n, 1.0)) for n in names])
 
     def build(self) -> nn.Module:
         s = self.sep
@@ -73,7 +80,8 @@ class SeparationTask:
 
     def loss(self, model, batch, device):
         estimates = model(batch["mix"].to(device))
-        return separation_loss(estimates, batch["sources"].to(device), batch["sources_mask"].to(device))
+        mask = batch["sources_mask"].to(device) * self.source_weights.to(device)
+        return separation_loss(estimates, batch["sources"].to(device), mask)
 
     def evaluate(self, model, loader, device) -> dict:
         scores = evaluate_separation(model, loader, device)
@@ -128,6 +136,19 @@ def evaluate_all(task, model, val_loader, device) -> dict:
     if len(val_loader) == 1:
         return task.evaluate(model, next(iter(val_loader.values())), device)
     return {"validation": {name: task.evaluate(model, loader, device) for name, loader in val_loader.items()}}
+
+
+def build_train_set(registry, ds, d: dict, mix: MixConfig, length: int, kwargs: dict):
+    """One dataset's training snippets. An optional `vocal_mix: {from, split, p, gain_db_range}` entry
+    adds the vocals of another dataset (MUSDB18) to a share `p` of them, for datasets with no vocals."""
+    base = SnippetDataset.from_dataset(ds, d["train_split"], mix, length, **kwargs)
+    vm = d.get("vocal_mix")
+    if not vm:
+        return base
+    src = registry[vm["from"].lower()]
+    vocals = SnippetDataset.from_dataset(src, vm.get("split", "train"), mix, length, seed_base=10_000_000, **kwargs)
+    return VocalMixDataset(base, vocals, vm.get("p", 0.5), vm.get("gain_db_range", (-6.0, 6.0)),
+                           source_set=kwargs["source_set"])
 
 
 def split_lengths(total: int, weights: list[float]) -> list[int]:
@@ -199,17 +220,14 @@ def main(argv=None):
     registry = load_registry(cfg["sources"])
     mix = MixConfig.from_dict(cfg["mix"])
     datasets = [(registry[d["name"].lower()], d) for d in cfg["datasets"]]
+    # Datasets only used for their vocals still count for the licences.
+    used = [ds for ds, _ in datasets] + [registry[d["vocal_mix"]["from"].lower()] for d in cfg["datasets"] if d.get("vocal_mix")]
     train_len = t["steps_per_epoch"] * t["batch_size"]
     kwargs = {"tasks": (task.name,), **task.dataset_kwargs}
 
     # A dataset's optional `weight` (default 1) sets its share of the training batches.
     lengths = split_lengths(train_len, [float(d.get("weight", 1.0)) for _, d in datasets])
-    train_set = ConcatDataset(
-        [
-            SnippetDataset.from_dataset(ds, d["train_split"], mix, n, **kwargs)
-            for (ds, d), n in zip(datasets, lengths)
-        ]
-    )
+    train_set = ConcatDataset([build_train_set(registry, ds, d, mix, n, kwargs) for (ds, d), n in zip(datasets, lengths)])
     # Persistent workers: each lists the tracks once (a minute for Slakh's train split), not every epoch.
     workers = {"num_workers": t["num_workers"], "persistent_workers": t["num_workers"] > 0}
     if t["num_workers"] > 0 and "prefetch_factor" in t:
@@ -244,8 +262,8 @@ def main(argv=None):
             "epochs_before_resume": start_epoch,
             "config": cfg,
             "history": history,
-            "licenses": {ds.name: ds.license for ds, _ in datasets},
-            "non_commercial": any(ds.non_commercial for ds, _ in datasets),
+            "licenses": {ds.name: ds.license for ds in used},
+            "non_commercial": any(ds.non_commercial for ds in used),
         }
 
     def on_epoch(epoch):
