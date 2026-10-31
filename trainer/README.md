@@ -30,5 +30,7 @@ trainer --config configs/default.yaml
 ## Status
 
 Scaffold only. Nothing here has been run: torch is not installed on this
-machine yet, so the code is untested. Open: class vocabulary shared across
-Slakh and MUSDB18, onset/separation heads, ONNX export check against `audan`.
+machine yet, so the code is untested. The class vocabulary comes from
+`mixer.CLASSES`; the loss ignores classes whose target is unknown (snippets
+with an audible MUSDB18 `other` stem). Open: onset/separation heads, ONNX
+export check against `audan`.

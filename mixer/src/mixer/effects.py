@@ -82,15 +82,23 @@ DEFAULT_CHAIN = [EQ, COMPRESSOR, DISTORTION, ECHO, REVERB]
 
 def apply_chain(
     audio: np.ndarray, sr: int, rng: np.random.Generator, chain=DEFAULT_CHAIN
-) -> tuple[np.ndarray, dict[str, Params]]:
-    """Applies each effect of `chain` that fires; returns the audio and the
-    parameters used. The rng is consumed identically whether or not
-    pedalboard is installed, so seeds stay comparable across machines."""
-    used = {}
+) -> tuple[np.ndarray, list[dict]]:
+    """Applies each effect of `chain` that fires, in order. Returns the audio
+    and one record per effect: `fired` is the random draw, `applied` whether it
+    actually ran (it does not when pedalboard is missing). The rng is consumed
+    identically either way, so seeds stay comparable across machines."""
+    records = []
+    have_backend = _pedalboard() is not None
     for effect in chain:
-        fires = rng.random() < effect.probability
+        fired = bool(rng.random() < effect.probability)
         params = effect.sample(rng)
-        if fires and _pedalboard() is not None:
+        applied = fired and have_backend
+        if applied:
             audio = effect.apply(audio, sr, params)
-            used[effect.name] = params
-    return audio, used
+        records.append({"name": effect.name, "fired": fired, "applied": applied, "params": params})
+    return audio, records
+
+
+def backend_version() -> str | None:
+    pb = _pedalboard()
+    return None if pb is None else getattr(pb, "__version__", "unknown")

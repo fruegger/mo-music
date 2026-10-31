@@ -28,6 +28,7 @@ def main(argv=None):
     render.add_argument("--seeds", default="0-9", help="e.g. 0-9 or 3,5,8")
     render.add_argument("--limit", type=int, help="only the first N tracks")
     render.add_argument("--seconds", type=float, default=MixConfig.seconds)
+    render.add_argument("--stems", action="store_true", help="also write each processed stem (for separation training)")
     render.add_argument("--out", type=Path, required=True)
     args = parser.parse_args(argv)
 
@@ -43,6 +44,11 @@ def main(argv=None):
             name = f"{track.name}_{seed}"
             sf.write(args.out / f"{name}.wav", snippet.mix, snippet.sample_rate)
             (args.out / f"{name}.json").write_text(json.dumps(snippet.labels, indent=1), encoding="utf-8")
+            if args.stems:
+                stem_dir = args.out / f"{name}.stems"
+                stem_dir.mkdir(exist_ok=True)
+                for info, samples in zip(snippet.labels["stems"], snippet.stems):
+                    sf.write(stem_dir / f"{info['stem']}.wav", samples, snippet.sample_rate)
             print(name)
 
 

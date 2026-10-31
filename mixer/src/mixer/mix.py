@@ -1,11 +1,32 @@
-"""Snippet rendering: crop, per-stem effects and gain, sum, label."""
+"""Snippet rendering: crop, per-stem effects and gain, sum, label.
 
-from dataclasses import dataclass, field
+Label file (schema 1), one JSON object per snippet:
+
+    schema, mixer_version, effects_backend     provenance
+    dataset, track, seed, config               enough to re-render it
+    sample_rate, channels, seconds, frames     the audio
+    start_frame, start_seconds                 where in the track the crop starts
+    mix_scale                                  gain applied to avoid clipping
+    stems[]    stem, class (shared vocabulary or null), source_class, detail,
+               ambiguous, is_drum, gain_db, rms_db, active, effects[]
+    activity   fps, n_frames, per_stem {stem: "0110..."}  energy above
+               `activity_threshold_db`, per frame, in the final mix
+    classes    classes with at least one active, unambiguous stem
+    ambiguous  true while an unlabelled mixture stem (MUSDB18 "other") is
+               audible: the truth for classes it could contain is unknown
+    times      onsets / boundaries in seconds from the snippet start (reserved,
+               empty until those labels are implemented)
+"""
+
+from dataclasses import asdict, dataclass, field
 
 import numpy as np
 
-from .effects import DEFAULT_CHAIN, apply_chain, db_to_gain
+from . import __version__
+from .effects import DEFAULT_CHAIN, apply_chain, backend_version, db_to_gain
 from .sources import Track
+
+SCHEMA_VERSION = 1
 
 
 @dataclass(frozen=True)
@@ -16,6 +37,14 @@ class MixConfig:
     min_stems: int = 1
     effects: bool = True
     peak_target: float = 0.95  # the final mix is scaled down to this peak if it clips
+    activity_fps: int = 10
+    activity_threshold_db: float = -50.0  # frame RMS (dBFS, in the final mix) above which a stem counts as active
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "MixConfig":
+        data = dict(data)
+        data["gain_db_range"] = tuple(data["gain_db_range"])
+        return cls(**data)
 
 
 @dataclass
@@ -23,6 +52,7 @@ class Snippet:
     mix: np.ndarray  # (frames, channels) float32
     sample_rate: int
     stems: np.ndarray  # (n_stems_in_mix, frames, channels): each stem as heard in the mix
+    activity: np.ndarray  # (n_stems_in_mix, n_frames) bool
     labels: dict = field(default_factory=dict)
 
 
@@ -32,6 +62,14 @@ def _stable_hash(text: str) -> int:
     for byte in text.encode("utf-8"):
         h = ((h ^ byte) * 16777619) % 2**32
     return h
+
+
+def frame_activity(stems: np.ndarray, sample_rate: int, fps: int, threshold_db: float) -> np.ndarray:
+    """(n_stems, n_frames) bool: frame RMS above `threshold_db` dBFS."""
+    hop = sample_rate // fps
+    n_frames = stems.shape[1] // hop
+    power = (stems[:, : n_frames * hop] ** 2).mean(axis=2).reshape(len(stems), n_frames, hop).mean(axis=2)
+    return 10.0 * np.log10(power + 1e-12) > threshold_db
 
 
 def render_snippet(track: Track, seed: int, config: MixConfig = MixConfig()) -> Snippet:
@@ -44,30 +82,66 @@ def render_snippet(track: Track, seed: int, config: MixConfig = MixConfig()) -> 
     if len(kept) < config.min_stems:
         kept = list(track.stems[: config.min_stems])
 
-    rendered, stem_info = [], []
+    rendered, chosen = [], []
     for stem in kept:
         audio = stem.load(start, length)
         gain_db = float(rng.uniform(*config.gain_db_range))
-        used = {}
+        records = []
         if config.effects:
-            audio, used = apply_chain(audio, track.sample_rate, rng, DEFAULT_CHAIN)
+            audio, records = apply_chain(audio, track.sample_rate, rng, DEFAULT_CHAIN)
         rendered.append(audio * db_to_gain(gain_db))
-        stem_info.append(
-            {"stem": stem.name, "class": stem.label, "is_drum": stem.is_drum, "gain_db": gain_db, "effects": used}
-        )
+        chosen.append((stem, gain_db, records))
 
     stems = np.stack(rendered)
     mix = stems.sum(axis=0)
     peak = float(np.abs(mix).max())
     scale = config.peak_target / peak if peak > config.peak_target else 1.0
+    mix, stems = (mix * scale).astype(np.float32), (stems * scale).astype(np.float32)
+
+    activity = frame_activity(stems, track.sample_rate, config.activity_fps, config.activity_threshold_db)
+    stem_info = []
+    for (stem, gain_db, records), samples, active in zip(chosen, stems, activity):
+        rms = float(np.sqrt((samples**2).mean()))
+        stem_info.append(
+            {
+                "stem": stem.name,
+                "class": stem.label,
+                "source_class": stem.source_class,
+                "detail": stem.detail,
+                "ambiguous": stem.ambiguous,
+                "is_drum": stem.is_drum,
+                "gain_db": gain_db,
+                "rms_db": float(20.0 * np.log10(rms + 1e-12)),
+                "active": bool(active.any()),
+                "effects": records,
+            }
+        )
 
     labels = {
+        "schema": SCHEMA_VERSION,
+        "mixer_version": __version__,
+        "effects_backend": backend_version(),
         "dataset": track.dataset,
         "track": track.name,
         "seed": seed,
+        "config": asdict(config),
+        "sample_rate": track.sample_rate,
+        "channels": int(mix.shape[1]),
+        "seconds": config.seconds,
+        "frames": int(mix.shape[0]),
         "start_frame": start,
-        "classes": sorted({s["class"] for s in stem_info}),
-        "stems": stem_info,
+        "start_seconds": start / track.sample_rate,
         "mix_scale": scale,
+        "stems": stem_info,
+        "activity": {
+            "fps": config.activity_fps,
+            "n_frames": int(activity.shape[1]),
+            "per_stem": {
+                info["stem"]: "".join("1" if a else "0" for a in row) for info, row in zip(stem_info, activity)
+            },
+        },
+        "classes": sorted({i["class"] for i in stem_info if i["active"] and i["class"] is not None}),
+        "ambiguous": any(i["ambiguous"] and i["active"] for i in stem_info),
+        "times": {"onsets": [], "boundaries": []},
     }
-    return Snippet((mix * scale).astype(np.float32), track.sample_rate, (stems * scale).astype(np.float32), labels)
+    return Snippet(mix, track.sample_rate, stems, activity, labels)

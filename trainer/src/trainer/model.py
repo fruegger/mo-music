@@ -4,7 +4,7 @@ import torch
 import torchaudio
 from torch import nn
 
-from .data import CLASSES
+from mixer import CLASSES
 
 
 class InstrumentCnn(nn.Module):

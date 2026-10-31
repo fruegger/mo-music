@@ -18,11 +18,11 @@ def evaluate(model, loader, device) -> dict:
     model.eval()
     tp = fp = fn = 0.0
     with torch.no_grad():
-        for audio, target in loader:
+        for audio, target, mask in loader:
             pred = (model(audio.to(device)).sigmoid() > 0.5).float().cpu()
-            tp += float((pred * target).sum())
-            fp += float((pred * (1 - target)).sum())
-            fn += float(((1 - pred) * target).sum())
+            tp += float((pred * target * mask).sum())
+            fp += float((pred * (1 - target) * mask).sum())
+            fn += float(((1 - pred) * target * mask).sum())
     precision = tp / max(tp + fp, 1.0)
     recall = tp / max(tp + fn, 1.0)
     return {"precision": precision, "recall": recall, "f1": 2 * precision * recall / max(precision + recall, 1e-9)}
@@ -65,7 +65,11 @@ def main(argv=None):
 
     model = InstrumentCnn().to(device)
     optimiser = torch.optim.Adam(model.parameters(), lr=t["lr"])
-    loss_fn = nn.BCEWithLogitsLoss()
+    bce = nn.BCEWithLogitsLoss(reduction="none")
+
+    def loss_fn(logits, target, mask):
+        """BCE over the classes whose target is known (see `data.loss_mask`)."""
+        return (bce(logits, target) * mask).sum() / mask.sum().clamp(min=1.0)
 
     out = Path(cfg["out_dir"])
     out.mkdir(parents=True, exist_ok=True)
@@ -74,10 +78,10 @@ def main(argv=None):
         for d in train_set.datasets:
             d.set_epoch(epoch)
         model.train()
-        for step, (audio, target) in enumerate(train_loader):
+        for step, (audio, target, mask) in enumerate(train_loader):
             if step >= t["steps_per_epoch"]:
                 break
-            loss = loss_fn(model(audio.to(device)), target.to(device))
+            loss = loss_fn(model(audio.to(device)), target.to(device), mask.to(device))
             optimiser.zero_grad()
             loss.backward()
             optimiser.step()

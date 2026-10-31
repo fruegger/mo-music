@@ -8,15 +8,23 @@ import numpy as np
 import soundfile as sf
 import yaml
 
+from .vocab import MUSDB_CLASSES, SLAKH_CLASSES
+
 SAMPLE_RATE = 44100
 
 
 @dataclass
 class Stem:
     name: str
-    label: str  # instrument class
+    label: str | None  # class in the shared vocabulary; None = unknown mixture (MUSDB18 "other")
+    source_class: str  # the dataset's own class name
     load: Callable[[int, int], np.ndarray]  # (start, length) in frames -> (length, channels) float32
     is_drum: bool = False
+    detail: str = ""  # finer identity where the dataset has it (Slakh: MIDI program name)
+
+    @property
+    def ambiguous(self) -> bool:
+        return self.label is None
 
 
 @dataclass
@@ -45,7 +53,14 @@ def slakh_tracks(root: Path, split: str) -> Iterator[Track]:
             if not info.get("audio_rendered") or not path.exists():
                 continue
             stems.append(
-                Stem(sid, info["inst_class"], lambda s, n, p=path: _read(p, s, n), bool(info["is_drum"]))
+                Stem(
+                    sid,
+                    SLAKH_CLASSES[info["inst_class"]],
+                    info["inst_class"],
+                    lambda s, n, p=path: _read(p, s, n),
+                    bool(info["is_drum"]),
+                    info.get("midi_program_name", ""),
+                )
             )
         mix = sf.info(track_dir / "mix.flac")
         yield Track("slakh2100", track_dir.name, mix.samplerate, mix.frames, stems)
@@ -70,8 +85,8 @@ def musdb_tracks(root: Path, split: str) -> Iterator[Track]:
             return cache["audio"][idx + 1, start : start + length]
 
         stems = [
-            Stem(label, label, lambda s, n, i=i, f=load: f(s, n, i), label == "drums")
-            for i, label in enumerate(MUSDB_STEMS)
+            Stem(name, MUSDB_CLASSES[name], name, lambda s, n, i=i, f=load: f(s, n, i), name == "drums")
+            for i, name in enumerate(MUSDB_STEMS)
         ]
         yield Track("musdb18", path.name.removesuffix(".stem.mp4"), int(info.rate(0)), n_frames, stems)
 
