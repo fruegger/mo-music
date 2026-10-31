@@ -4,6 +4,7 @@ or `trainer --config configs/separation.yaml` (source separation); the config's
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 import torch
@@ -187,6 +188,8 @@ def main(argv=None):
     parser.add_argument("--resume", type=Path, help="checkpoint.pt to continue from (or a bare model.pt, with --start-epoch)")
     parser.add_argument("--start-epoch", type=int, help="epochs already done when resuming from a bare model.pt")
     args = parser.parse_args(argv)
+    # torch.onnx prints emoji progress marks, which a cp1252 Windows console cannot encode.
+    sys.stdout.reconfigure(errors="replace")
     cfg = yaml.safe_load(args.config.read_text(encoding="utf-8"))
     t = cfg["train"]
     torch.manual_seed(t["seed"])
