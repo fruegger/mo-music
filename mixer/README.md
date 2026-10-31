@@ -55,8 +55,9 @@ separation training.
 - onset labels (Slakh: from `MIDI/Sxx.mid`; MUSDB18: from stem energy)
 - pitch shift and tempo change (they move onsets, so labels must be re-timed)
 - mix-bus effects and loudness normalisation of the final mix
-- the effect chain needs `pip install -e ".[effects]"` (pedalboard); without it
-  only gain is applied. It is untested in this scaffold.
+- the effect chain needs `pip install -e ".[effects]"` (pedalboard 0.9.26 was
+  tested); without it only gain is applied and the label records say so.
+  Its tests (`tests/test_effects.py`) are skipped when pedalboard is missing.
 - MUSDB18 loading is untested (needs `stempeg` and ffmpeg)
 
 ## Licences
