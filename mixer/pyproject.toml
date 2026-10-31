@@ -1,0 +1,28 @@
+[project]
+name = "mixer"
+version = "0.1.0"
+description = "Seeded, label-preserving random mixes of multitrack stems for training audio models"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy",
+    "soundfile",
+    "pyyaml",
+]
+
+[project.optional-dependencies]
+effects = ["pedalboard"]  # EQ, compression, distortion, delay, reverb
+musdb = ["stempeg"]       # reads MUSDB18's .stem.mp4 (needs ffmpeg)
+dev = ["pytest"]
+
+[project.scripts]
+mixer = "mixer.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

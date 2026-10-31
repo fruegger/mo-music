@@ -1,0 +1,50 @@
+"""`mixer render`: write fixed, seeded snippets (mix .wav + labels .json)."""
+
+import argparse
+import json
+from pathlib import Path
+
+import soundfile as sf
+
+from .mix import MixConfig, render_snippet
+from .registry import load_registry
+from .sources import iter_tracks
+
+
+def parse_seeds(text: str) -> list[int]:
+    if "-" in text:
+        lo, hi = text.split("-")
+        return list(range(int(lo), int(hi) + 1))
+    return [int(s) for s in text.split(",")]
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(prog="mixer")
+    sub = parser.add_subparsers(dest="cmd", required=True)
+    render = sub.add_parser("render", help="render seeded snippets to disk")
+    render.add_argument("--sources", type=Path, required=True, help="dataset log (repo/prototype/sources.log)")
+    render.add_argument("--dataset", required=True)
+    render.add_argument("--split", default="train")
+    render.add_argument("--seeds", default="0-9", help="e.g. 0-9 or 3,5,8")
+    render.add_argument("--limit", type=int, help="only the first N tracks")
+    render.add_argument("--seconds", type=float, default=MixConfig.seconds)
+    render.add_argument("--out", type=Path, required=True)
+    args = parser.parse_args(argv)
+
+    dataset = load_registry(args.sources)[args.dataset.lower()]
+    config = MixConfig(seconds=args.seconds)
+    args.out.mkdir(parents=True, exist_ok=True)
+    for i, track in enumerate(iter_tracks(dataset.name, dataset.path, args.split)):
+        if args.limit is not None and i >= args.limit:
+            break
+        for seed in parse_seeds(args.seeds):
+            snippet = render_snippet(track, seed, config)
+            snippet.labels["license"] = dataset.license
+            name = f"{track.name}_{seed}"
+            sf.write(args.out / f"{name}.wav", snippet.mix, snippet.sample_rate)
+            (args.out / f"{name}.json").write_text(json.dumps(snippet.labels, indent=1), encoding="utf-8")
+            print(name)
+
+
+if __name__ == "__main__":
+    main()

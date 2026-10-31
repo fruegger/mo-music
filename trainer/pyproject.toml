@@ -1,0 +1,27 @@
+[project]
+name = "trainer"
+version = "0.1.0"
+description = "Model training for audio analysis tasks (instrument recognition first), fed by the mixer"
+requires-python = ">=3.11"
+dependencies = [
+    "mixer",
+    "torch",
+    "torchaudio",
+    "onnx",
+    "pyyaml",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[project.scripts]
+trainer = "trainer.train:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+# Install the sibling project first:  pip install -e ../mixer[effects,musdb]
