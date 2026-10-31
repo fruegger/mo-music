@@ -195,7 +195,9 @@ def musdb_tracks(root: Path, split: str) -> Iterator[Track]:
         yield Track("musdb18", path.name.removesuffix(".stem.mp4"), rate, n_frames, stems)
 
 
-LOADERS = {"slakh2100": slakh_tracks, "musdb18": musdb_tracks}
+# "musdb18-prepared" is the same loader on the folder `prepare_musdb` wrote (its own line in
+# sources.log, so the original path stays on record for preparing).
+LOADERS = {"slakh2100": slakh_tracks, "musdb18": musdb_tracks, "musdb18-prepared": musdb_tracks}
 
 
 def iter_tracks(dataset: str, root: Path, split: str) -> Iterator[Track]:

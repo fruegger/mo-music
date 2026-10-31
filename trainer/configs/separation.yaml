@@ -2,8 +2,12 @@ task: separation
 sources: ../repo/prototype/sources.log
 out_dir: runs/separation-baseline
 
-datasets:            # name as in sources.log, split
-  - {name: slakh2100, train_split: train, val_split: validation}
+datasets:            # name as in sources.log, splits, weight = share of the training batches
+  - {name: slakh2100, train_split: train, val_split: validation, weight: 1.0}
+  # Needs `mixer prepare-musdb --src C:/workarea/MUSDB18 --dst C:/workarea/MUSDB18_prepared` first (one-off,
+  # decodes all 150 tracks). MUSDB18 has no validation split: its test split is used for validation.
+  # Anything trained on it is non-commercial (run.json says so).
+  - {name: musdb18-prepared, train_split: train, val_split: test, weight: 1.0}
 
 separation:
   source_set: musdb4   # drums, bass, vocals, other  (or: classes)

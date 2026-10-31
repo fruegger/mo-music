@@ -118,6 +118,23 @@ class SeparationTask:
 TASKS = {"instruments": InstrumentTask, "separation": SeparationTask}
 
 
+def evaluate_all(task, model, val_loader, device) -> dict:
+    """One loader: its scores as they are. A dict of loaders (one per dataset): the
+    scores of each under "validation", so Slakh2100 and MUSDB18 are not averaged
+    into one number."""
+    if not isinstance(val_loader, dict):
+        return task.evaluate(model, val_loader, device)
+    if len(val_loader) == 1:
+        return task.evaluate(model, next(iter(val_loader.values())), device)
+    return {"validation": {name: task.evaluate(model, loader, device) for name, loader in val_loader.items()}}
+
+
+def split_lengths(total: int, weights: list[float]) -> list[int]:
+    """Sizes of the per-dataset training sets, in proportion to `weights`. The loader shuffles over
+    all of them, so a dataset's share of the batches follows its weight."""
+    return [max(1, round(total * w)) for w in weights]
+
+
 def fit(task, model, train_loader, val_loader, epochs: int, steps_per_epoch: int, lr: float, device: str,
         on_epoch=None, optimiser=None, start_epoch: int = 0, history=None, on_epoch_end=None) -> list[dict]:
     """The training loop, separated from the data setup so it can be tested on small loaders.
@@ -135,7 +152,7 @@ def fit(task, model, train_loader, val_loader, epochs: int, steps_per_epoch: int
             optimiser.zero_grad()
             loss.backward()
             optimiser.step()
-        history.append({"epoch": epoch, "train_loss": float(loss.detach()), **task.evaluate(model, val_loader, device)})
+        history.append({"epoch": epoch, "train_loss": float(loss.detach()), **evaluate_all(task, model, val_loader, device)})
         print(json.dumps(history[-1]), flush=True)
         if on_epoch_end is not None:
             on_epoch_end(epoch, history, optimiser)
@@ -182,13 +199,12 @@ def main(argv=None):
     train_len = t["steps_per_epoch"] * t["batch_size"]
     kwargs = {"tasks": (task.name,), **task.dataset_kwargs}
 
+    # A dataset's optional `weight` (default 1) sets its share of the training batches.
+    lengths = split_lengths(train_len, [float(d.get("weight", 1.0)) for _, d in datasets])
     train_set = ConcatDataset(
-        [SnippetDataset.from_dataset(ds, d["train_split"], mix, train_len, **kwargs) for ds, d in datasets]
-    )
-    val_set = ConcatDataset(
         [
-            SnippetDataset.from_dataset(ds, d["val_split"], mix, t["val_snippets"], t["val_seed_base"], **kwargs)
-            for ds, d in datasets
+            SnippetDataset.from_dataset(ds, d["train_split"], mix, n, **kwargs)
+            for (ds, d), n in zip(datasets, lengths)
         ]
     )
     # Persistent workers: each lists the tracks once (a minute for Slakh's train split), not every epoch.
@@ -196,7 +212,16 @@ def main(argv=None):
     if t["num_workers"] > 0 and "prefetch_factor" in t:
         workers["prefetch_factor"] = t["prefetch_factor"]
     train_loader = DataLoader(train_set, t["batch_size"], shuffle=True, drop_last=True, **workers)
-    val_loader = DataLoader(val_set, t["batch_size"], **workers)
+    # One validation loader per dataset, in the main process (`val_workers` to change): extra
+    # worker pools would cost memory, and 48 snippets are quick.
+    val_loader = {
+        ds.name: DataLoader(
+            SnippetDataset.from_dataset(ds, d["val_split"], mix, t["val_snippets"], t["val_seed_base"], **kwargs),
+            t["batch_size"],
+            num_workers=t.get("val_workers", 0),
+        )
+        for ds, d in datasets
+    }
 
     model = task.build().to(device)
     optimiser = torch.optim.Adam(model.parameters(), lr=t["lr"])

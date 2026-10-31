@@ -82,7 +82,8 @@ One JSON object per snippet; the full field list is the docstring of
 - **Preparing MUSDB18:** `mixer prepare-musdb --src <MUSDB18> --dst <dir>` decodes
   each track once (PyAV, no ffmpeg needed) into FLAC stems plus `onsets.json`
   (about 10-30 s per track), so training reads them like Slakh. Point the
-  `musdb18` line of `sources.log` at the prepared folder. The original
+  `MUSDB18-prepared` line of `sources.log` at the prepared folder (the dataset name
+  `musdb18-prepared` uses the same loader; the `MUSDB18` line keeps the original path). The original
   `.stem.mp4` files also load directly, but decoding a track takes seconds, so
   that is for a quick look only.
 - **Tempo and pitch** (`transform`, off unless `p_tempo` / `p_pitch` > 0): the

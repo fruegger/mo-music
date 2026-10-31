@@ -6,7 +6,7 @@ Trains audio-analysis models on snippets from [`../mixer`](../mixer). The
 | task | config | model | status |
 |---|---|---|---|
 | `instruments` | `configs/default.yaml` | log-mel CNN, multi-label (which classes are in the mix) | runs end to end on Slakh |
-| `separation` | `configs/separation.yaml` | spectrogram U-Net predicting one mask per source | runs end to end on Slakh; not trained beyond a few steps |
+| `separation` | `configs/separation.yaml` (Slakh2100 + MUSDB18), `configs/separation-cpu.yaml` (Slakh only, CPU-sized) | spectrogram U-Net predicting one mask per source | runs end to end; see the first run below |
 
 ```
 pip install -e ../mixer[effects]
@@ -61,6 +61,27 @@ are tested against PyTorch with onnxruntime. The exporter needs `onnxscript`.
   between runs
 - each run writes `run.json` with the dataset licences from `sources.log`; a
   run that used MUSDB18 is marked `non_commercial`
+
+## Training on MUSDB18 as well
+
+`configs/separation.yaml` lists Slakh2100 and `musdb18-prepared`. MUSDB18 has to
+be decoded once first (it is 150 five-stream AAC files; decoding a track takes
+seconds, too slow to repeat in training):
+
+```
+mixer prepare-musdb --src C:/workarea/MUSDB18 --dst C:/workarea/MUSDB18_prepared
+```
+
+(`MUSDB18-prepared` in `repo/prototype/sources.log` points at that folder.) Each
+dataset has a `weight`, its share of the training batches. MUSDB18 has no
+validation split, so its `test` split is used for validation. Validation is
+scored per dataset (`history[].validation.<name>`) and never averaged across
+them: Slakh2100 (mono, synthesised, no vocals) and MUSDB18 (stereo, real
+recordings, with vocals) are very different. Vocals only get a target from
+MUSDB18; Slakh snippets have a silent vocals target.
+
+Anything trained on MUSDB18 is non-commercial: `run.json` says
+`non_commercial: true`, and the licence string of every dataset used.
 
 ## First separation run (CPU)
 

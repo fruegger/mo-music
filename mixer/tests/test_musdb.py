@@ -84,6 +84,11 @@ def test_prepared_and_raw_layouts_agree(musdb_root, tmp_path):
         assert np.allclose(a.onsets(), b.onsets(), atol=0.001)
 
 
+def test_the_prepared_folder_has_its_own_dataset_name(musdb_root, tmp_path):
+    prepare_musdb(musdb_root, tmp_path, splits=("train",))
+    assert [t.name for t in iter_tracks("musdb18-prepared", tmp_path, "train")] == ["Fake Artist - Fake Song"]
+
+
 def test_snippets_carry_estimated_onsets_and_the_provenance(musdb_root, tmp_path):
     prepare_musdb(musdb_root, tmp_path, splits=("train",))
     track = next(iter_tracks("musdb18", tmp_path, "train"))
