@@ -8,7 +8,7 @@ import soundfile as sf
 
 from .mix import MixConfig, render_snippet
 from .registry import load_registry
-from .sources import iter_tracks
+from .sources import iter_tracks, prepare_musdb
 
 
 def parse_seeds(text: str) -> list[int]:
@@ -33,7 +33,17 @@ def main(argv=None):
     render.add_argument("--fast-stretch", action="store_true", help="faster, less accurate tempo/pitch (up to ~30 cents off)")
     render.add_argument("--stems", action="store_true", help="also write each processed stem (for separation training)")
     render.add_argument("--out", type=Path, required=True)
+    prepare = sub.add_parser("prepare-musdb", help="decode MUSDB18 once into FLAC stems plus estimated onsets")
+    prepare.add_argument("--src", type=Path, required=True, help="MUSDB18 folder with train/ and test/")
+    prepare.add_argument("--dst", type=Path, required=True)
+    prepare.add_argument("--splits", nargs="+", default=["train", "test"])
+    prepare.add_argument("--limit", type=int, help="only the first N tracks")
     args = parser.parse_args(argv)
+
+    if args.cmd == "prepare-musdb":
+        n = prepare_musdb(args.src, args.dst, tuple(args.splits), args.limit)
+        print(f"prepared {n} tracks in {args.dst}")
+        return
 
     dataset = load_registry(args.sources)[args.dataset.lower()]
     config = MixConfig(

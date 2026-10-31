@@ -13,7 +13,7 @@ Label file (schema 1), one JSON object per snippet:
     mix_scale                                  gain applied to avoid clipping
     stems[]    stem, class (shared vocabulary or null), source_class, detail,
                ambiguous, is_drum, gain_db, pitch_semitones (0 for drums unless
-               `pitch_drums`), rms_db, active, onsets, effects[]
+               `pitch_drums`), rms_db, active, onsets, onset_source, effects[]
     activity   fps, n_frames, per_stem {stem: "0110..."}  energy above
                `activity_threshold_db`, per frame, in the final mix
     classes    classes with at least one active, unambiguous stem
@@ -22,9 +22,12 @@ Label file (schema 1), one JSON object per snippet:
     times      seconds from the snippet start (after the tempo change):
                  onsets            every audible note onset, sorted
                  onsets_by_class   the same, per class (unambiguous stems)
-                 onsets_complete   false if an active stem has no onset data
-                                   (MUSDB18): onsets are then incomplete and
-                                   must not be used as negatives
+                 onsets_complete   false if an active stem has no onset data:
+                                   onsets are then incomplete and must not be
+                                   used as negatives
+                 onsets_estimated  true if some onsets come from the audio
+                                   (MUSDB18, `onset_source: "estimated"`)
+                                   rather than from MIDI: noisy labels
                  boundaries        reserved, empty
 """
 
@@ -142,6 +145,7 @@ def onset_times(stem_info: list[dict]) -> dict:
         "onsets": sorted({o for info in stem_info for o in (info["onsets"] or [])}),
         "onsets_by_class": {c: sorted(set(v)) for c, v in sorted(by_class.items())},
         "onsets_complete": all(info["onsets"] is not None for info in stem_info if info["active"]),
+        "onsets_estimated": any(info["onset_source"] == "estimated" for info in stem_info if info["active"]),
         "boundaries": [],
     }
 
@@ -208,6 +212,7 @@ def render_snippet(track: Track, seed: int, config: MixConfig = MixConfig()) -> 
                 "rms_db": float(20.0 * np.log10(rms + 1e-12)),
                 "active": bool(active.any()),
                 "onsets": stem_onsets,
+                "onset_source": stem.onset_source if stem_onsets is not None else None,
                 "effects": records,
             }
         )

@@ -8,11 +8,11 @@ dependencies = [
     "soundfile",
     "pyyaml",
     "mido",
+    "av",  # decodes MUSDB18 (.stem.mp4), codecs bundled
 ]
 
 [project.optional-dependencies]
 effects = ["pedalboard"]  # EQ, compression, distortion, delay, reverb
-musdb = ["stempeg"]       # reads MUSDB18's .stem.mp4 (needs ffmpeg)
 dev = ["pytest"]
 
 [project.scripts]

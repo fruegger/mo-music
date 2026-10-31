@@ -1,5 +1,6 @@
 """Multitrack sources: tracks made of labelled stems, loaded lazily."""
 
+import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Iterator
@@ -9,6 +10,7 @@ import numpy as np
 import soundfile as sf
 import yaml
 
+from . import onset_detect
 from .vocab import MUSDB_CLASSES, SLAKH_CLASSES
 
 SAMPLE_RATE = 44100
@@ -23,6 +25,7 @@ class Stem:
     is_drum: bool = False
     detail: str = ""  # finer identity where the dataset has it (Slakh: MIDI program name)
     onsets: Callable[[], np.ndarray] | None = None  # note onsets in seconds from the track start, if known
+    onset_source: str | None = None  # "midi" (exact) or "estimated" (from the audio)
 
     @property
     def ambiguous(self) -> bool:
@@ -43,6 +46,11 @@ def _read(path: Path, start: int, length: int) -> np.ndarray:
     if len(audio) < length:  # a stem shorter than the mix is silent after its end
         audio = np.pad(audio, ((0, length - len(audio)), (0, 0)))
     return audio
+
+
+def _slice(audio: np.ndarray, start: int, length: int) -> np.ndarray:
+    chunk = audio[start : start + length]
+    return chunk if len(chunk) == length else np.pad(chunk, ((0, length - len(chunk)), (0, 0)))
 
 
 def midi_onsets(path: Path) -> np.ndarray:
@@ -87,35 +95,104 @@ def slakh_tracks(root: Path, split: str) -> Iterator[Track]:
                     bool(info["is_drum"]),
                     info.get("midi_program_name", ""),
                     _lazy(midi_onsets, midi) if midi.exists() else None,
+                    "midi" if midi.exists() else None,
                 )
             )
         mix = sf.info(track_dir / "mix.flac")
         yield Track("slakh2100", track_dir.name, mix.samplerate, mix.frames, stems)
 
 
-MUSDB_STEMS = ["drums", "bass", "other", "vocals"]  # stream order after the mixture
+# MUSDB18 .stem.mp4 holds five AAC streams, in this order.
+MUSDB_STREAMS = ["mixture", "drums", "bass", "other", "vocals"]
+MUSDB_STEMS = MUSDB_STREAMS[1:]
+ONSETS_FILE = "onsets.json"
+
+
+def decode_musdb(path: Path) -> tuple[dict[str, np.ndarray], int]:
+    """Decodes a MUSDB18 `.stem.mp4` into `{stem: (frames, 2) float32}` and the
+    sample rate (PyAV, which bundles the codecs: no ffmpeg needed). Takes a few
+    seconds per track, hence `prepare_musdb`."""
+    import av
+
+    stems = {}
+    rate = SAMPLE_RATE
+    for index, name in enumerate(MUSDB_STREAMS):
+        if name == "mixture":
+            continue
+        with av.open(str(path)) as container:
+            stream = container.streams.audio[index]
+            rate = stream.rate
+            chunks = [frame.to_ndarray() for frame in container.decode(stream)]
+        stems[name] = np.ascontiguousarray(np.concatenate(chunks, axis=1).T, dtype=np.float32)
+    n = min(len(a) for a in stems.values())
+    return {k: v[:n] for k, v in stems.items()}, rate
+
+
+def estimate_onsets(audio: np.ndarray, sample_rate: int) -> np.ndarray:
+    return onset_detect.detect_onsets(audio, sample_rate)
+
+
+def prepare_musdb(src: Path, dst: Path, splits=("train", "test"), limit: int | None = None) -> int:
+    """Decodes MUSDB18 once into `dst/<split>/<track>/{drums,bass,other,vocals}.flac`
+    plus `onsets.json` (onsets estimated from each stem's energy), so training
+    reads stems by random access like Slakh. Returns the number of tracks."""
+    done = 0
+    for split in splits:
+        for path in sorted((Path(src) / split).glob("*.stem.mp4")):
+            if limit is not None and done >= limit:
+                return done
+            out = Path(dst) / split / path.name.removesuffix(".stem.mp4")
+            out.mkdir(parents=True, exist_ok=True)
+            stems, rate = decode_musdb(path)
+            onsets = {}
+            for name, audio in stems.items():
+                sf.write(out / f"{name}.flac", audio, rate)
+                onsets[name] = [round(float(t), 4) for t in estimate_onsets(audio, rate)]
+            meta = {"sample_rate": rate, "detector": "mixer.onset_detect", "onsets": onsets}
+            (out / ONSETS_FILE).write_text(json.dumps(meta), encoding="utf-8")
+            done += 1
+    return done
+
+
+def _musdb_stem(name: str, load, onsets) -> Stem:
+    return Stem(name, MUSDB_CLASSES[name], name, load, name == "drums", "", onsets, "estimated")
 
 
 def musdb_tracks(root: Path, split: str) -> Iterator[Track]:
-    """MUSDB18: `<split>/*.stem.mp4`, streams mixture/drums/bass/other/vocals.
-    Needs `stempeg` (and ffmpeg); a file is decoded whole on first access."""
-    import stempeg
+    """MUSDB18, either as prepared by `prepare_musdb` (`<split>/<track>/*.flac`,
+    fast random access) or as the original `<split>/*.stem.mp4` (each track is
+    decoded whole on first use, several seconds each: fine for a look, too slow
+    for training). Onsets are estimated from the stems' energy; there is no MIDI."""
+    for track_dir in sorted(p for p in (root / split).glob("*") if p.is_dir() and (p / ONSETS_FILE).exists()):
+        meta = json.loads((track_dir / ONSETS_FILE).read_text(encoding="utf-8"))
+        stems = [
+            _musdb_stem(
+                name,
+                lambda s, n, p=track_dir / f"{name}.flac": _read(p, s, n),
+                lambda n=name, m=meta: np.array(m["onsets"][n], dtype=np.float64),
+            )
+            for name in MUSDB_STEMS
+        ]
+        info = sf.info(track_dir / "drums.flac")
+        yield Track("musdb18", track_dir.name, info.samplerate, info.frames, stems)
 
     for path in sorted((root / split).glob("*.stem.mp4")):
-        info = stempeg.Info(str(path))
-        n_frames = int(info.duration(0) * info.rate(0))
-        cache: dict[str, np.ndarray] = {}
-
-        def load(start, length, idx, path=path, cache=cache):
-            if "audio" not in cache:
-                cache["audio"], _ = stempeg.read_stems(str(path), dtype=np.float32)
-            return cache["audio"][idx + 1, start : start + length]
-
+        decoded = _lazy(decode_musdb, path)
         stems = [
-            Stem(name, MUSDB_CLASSES[name], name, lambda s, n, i=i, f=load: f(s, n, i), name == "drums")
-            for i, name in enumerate(MUSDB_STEMS)
+            _musdb_stem(
+                name,
+                lambda s, n, nm=name, d=decoded: _slice(d()[0][nm], s, n),
+                _lazy(lambda nm=name, d=decoded: estimate_onsets(d()[0][nm], d()[1])),
+            )
+            for name in MUSDB_STEMS
         ]
-        yield Track("musdb18", path.name.removesuffix(".stem.mp4"), int(info.rate(0)), n_frames, stems)
+        # The length and rate are needed up front; the first stream's header has them.
+        import av
+
+        with av.open(str(path)) as container:
+            stream = container.streams.audio[0]
+            rate, n_frames = stream.rate, int(float(stream.duration * stream.time_base) * stream.rate)
+        yield Track("musdb18", path.name.removesuffix(".stem.mp4"), rate, n_frames, stems)
 
 
 LOADERS = {"slakh2100": slakh_tracks, "musdb18": musdb_tracks}
