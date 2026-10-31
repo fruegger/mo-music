@@ -44,15 +44,23 @@ One JSON object per snippet; the full field list is the docstring of
   Slakh's MIDI program name (for example "Distortion Guitar").
 - **Effects** are an ordered list per stem: `fired` (the random draw) and
   `applied` (whether it ran; false when pedalboard is missing).
-- **`times`** is reserved for onsets and boundaries, in seconds from the
-  snippet start. Empty until those labels exist.
+- **Onsets** (`times`, seconds from the snippet start): `onsets` (all),
+  `onsets_by_class`, and per stem under `stems[].onsets`. From Slakh's
+  `MIDI/Sxx.mid` note-ons, following each file's tempo map. A note counts only
+  if its stem is audible in the `onset_window_s` (50 ms) after it, so notes
+  that the gain or a mute make inaudible are dropped. Slakh's MIDI times match
+  its audio to about 1 ms on isolated drum hits (checked in
+  `tests/test_onsets.py`). MUSDB18 has no MIDI: its stems have `onsets: null`
+  and the snippet gets `onsets_complete: false` (do not use it for onset
+  negatives). `mixer.targets.onset_target` turns the labels into frame targets.
+- `times.boundaries` is reserved for structure labels, empty for now.
 
 `mixer render --stems` also writes each processed stem to `<name>.stems/` for
 separation training.
 
 ## Not done yet
 
-- onset labels (Slakh: from `MIDI/Sxx.mid`; MUSDB18: from stem energy)
+- onset labels for MUSDB18 (no MIDI; would have to come from stem energy)
 - pitch shift and tempo change (they move onsets, so labels must be re-timed)
 - mix-bus effects and loudness normalisation of the final mix
 - the effect chain needs `pip install -e ".[effects]"` (pedalboard 0.9.26 was

@@ -59,7 +59,7 @@ def test_schema_fields():
     assert labels["sample_rate"] == SAMPLE_RATE and labels["channels"] == 2
     assert labels["frames"] == 2 * SAMPLE_RATE and labels["seconds"] == 2.0
     assert labels["activity"]["n_frames"] == 20 and labels["activity"]["fps"] == 10
-    assert labels["times"] == {"onsets": [], "boundaries": []}
+    assert labels["times"]["boundaries"] == [] and labels["times"]["onsets_complete"] is False  # synthetic stems have no onset data
     for info in labels["stems"]:
         assert set(info) >= {"stem", "class", "source_class", "detail", "ambiguous", "gain_db", "rms_db", "active", "effects"}
         assert len(labels["activity"]["per_stem"][info["stem"]]) == 20

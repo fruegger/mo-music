@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Iterator
 
+import mido
 import numpy as np
 import soundfile as sf
 import yaml
@@ -21,6 +22,7 @@ class Stem:
     load: Callable[[int, int], np.ndarray]  # (start, length) in frames -> (length, channels) float32
     is_drum: bool = False
     detail: str = ""  # finer identity where the dataset has it (Slakh: MIDI program name)
+    onsets: Callable[[], np.ndarray] | None = None  # note onsets in seconds from the track start, if known
 
     @property
     def ambiguous(self) -> bool:
@@ -43,6 +45,29 @@ def _read(path: Path, start: int, length: int) -> np.ndarray:
     return audio
 
 
+def midi_onsets(path: Path) -> np.ndarray:
+    """Sorted, distinct note-on times of a MIDI file in seconds, following its
+    tempo map (a note-on with velocity 0 is a note-off)."""
+    t, out = 0.0, set()
+    for msg in mido.MidiFile(path):  # iterating yields messages with delta times in seconds
+        t += msg.time
+        if msg.type == "note_on" and msg.velocity > 0:
+            out.add(t)
+    return np.array(sorted(out), dtype=np.float64)
+
+
+def _lazy(fn, *args):
+    """Calls `fn(*args)` on first use and keeps the result."""
+    box = []
+
+    def get():
+        if not box:
+            box.append(fn(*args))
+        return box[0]
+
+    return get
+
+
 def slakh_tracks(root: Path, split: str) -> Iterator[Track]:
     """Slakh2100: `<split>/TrackNNNNN/{mix.flac, stems/Sxx.flac, metadata.yaml}`."""
     for track_dir in sorted((root / split).glob("Track*")):
@@ -52,6 +77,7 @@ def slakh_tracks(root: Path, split: str) -> Iterator[Track]:
             path = track_dir / "stems" / f"{sid}.flac"
             if not info.get("audio_rendered") or not path.exists():
                 continue
+            midi = track_dir / "MIDI" / f"{sid}.mid"
             stems.append(
                 Stem(
                     sid,
@@ -60,6 +86,7 @@ def slakh_tracks(root: Path, split: str) -> Iterator[Track]:
                     lambda s, n, p=path: _read(p, s, n),
                     bool(info["is_drum"]),
                     info.get("midi_program_name", ""),
+                    _lazy(midi_onsets, midi) if midi.exists() else None,
                 )
             )
         mix = sf.info(track_dir / "mix.flac")

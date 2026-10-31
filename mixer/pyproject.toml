@@ -1,12 +1,13 @@
 [project]
 name = "mixer"
-version = "0.2.0"
+version = "0.3.0"
 description = "Seeded, label-preserving random mixes of multitrack stems for training audio models"
 requires-python = ">=3.11"
 dependencies = [
     "numpy",
     "soundfile",
     "pyyaml",
+    "mido",
 ]
 
 [project.optional-dependencies]
