@@ -47,7 +47,7 @@ def main(argv=None):
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     registry = load_registry(cfg["sources"])
-    mix = MixConfig(**{**cfg["mix"], "gain_db_range": tuple(cfg["mix"]["gain_db_range"])})
+    mix = MixConfig.from_dict(cfg["mix"])
     datasets = [(registry[d["name"].lower()], d) for d in cfg["datasets"]]
     train_len = t["steps_per_epoch"] * t["batch_size"]
 

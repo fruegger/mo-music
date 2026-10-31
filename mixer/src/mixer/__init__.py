@@ -1,6 +1,6 @@
 """Seeded random mixes of multitrack stems."""
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 from .mix import MixConfig, Snippet, render_snippet
 from .registry import Dataset, load_registry

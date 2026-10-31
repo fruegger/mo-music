@@ -28,12 +28,20 @@ def main(argv=None):
     render.add_argument("--seeds", default="0-9", help="e.g. 0-9 or 3,5,8")
     render.add_argument("--limit", type=int, help="only the first N tracks")
     render.add_argument("--seconds", type=float, default=MixConfig.seconds)
+    render.add_argument("--p-tempo", type=float, default=0.0, help="chance of a tempo change (needs pedalboard)")
+    render.add_argument("--p-pitch", type=float, default=0.0, help="chance of a pitch shift (needs pedalboard)")
+    render.add_argument("--fast-stretch", action="store_true", help="faster, less accurate tempo/pitch (up to ~30 cents off)")
     render.add_argument("--stems", action="store_true", help="also write each processed stem (for separation training)")
     render.add_argument("--out", type=Path, required=True)
     args = parser.parse_args(argv)
 
     dataset = load_registry(args.sources)[args.dataset.lower()]
-    config = MixConfig(seconds=args.seconds)
+    config = MixConfig(
+        seconds=args.seconds,
+        p_tempo=args.p_tempo,
+        p_pitch=args.p_pitch,
+        stretch_high_quality=not args.fast_stretch,
+    )
     args.out.mkdir(parents=True, exist_ok=True)
     for i, track in enumerate(iter_tracks(dataset.name, dataset.path, args.split)):
         if args.limit is not None and i >= args.limit:

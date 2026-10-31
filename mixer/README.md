@@ -53,6 +53,21 @@ One JSON object per snippet; the full field list is the docstring of
   `tests/test_onsets.py`). MUSDB18 has no MIDI: its stems have `onsets: null`
   and the snippet gets `onsets_complete: false` (do not use it for onset
   negatives). `mixer.targets.onset_target` turns the labels into frame targets.
+- **Tempo and pitch** (`transform`, off unless `p_tempo` / `p_pitch` > 0): the
+  whole snippet is sped up by `tempo_ratio` (log-uniform, 0.85-1.15 by
+  default) so all stems stay in sync, and pitch-shifted by `pitch_semitones`
+  (uniform, -3..3). Drums are not pitch-shifted unless `pitch_drums`. The
+  crop is `seconds * tempo_ratio` long in the original track (`source_seconds`),
+  and all `times` are in the new, output time. Rubber Band (through
+  pedalboard) does the work; asking for it without pedalboard is an error, not
+  a silent skip. The tempo/pitch draws come from their own random stream, so
+  enabling them leaves gains, dropped stems and effects unchanged.
+  Measured: onsets stay within ~3 ms (tempo) to ~10 ms (with pitch shift) of
+  their label; pitch is exact in high quality mode. The fast mode
+  (`--fast-stretch`) is ~2x quicker here but detunes by up to ~30 cents.
+  **Cost:** ~1 s per stem, about 7 s per 8-stem snippet when every snippet
+  is transformed (0.3 s without), single core.
+- Seeds rendered before mixer 0.4.0 give different crops: the crop-start draw changed so tempo changes do not disturb the other random choices.
 - `times.boundaries` is reserved for structure labels, empty for now.
 
 `mixer render --stems` also writes each processed stem to `<name>.stems/` for
@@ -61,7 +76,6 @@ separation training.
 ## Not done yet
 
 - onset labels for MUSDB18 (no MIDI; would have to come from stem energy)
-- pitch shift and tempo change (they move onsets, so labels must be re-timed)
 - mix-bus effects and loudness normalisation of the final mix
 - the effect chain needs `pip install -e ".[effects]"` (pedalboard 0.9.26 was
   tested); without it only gain is applied and the label records say so.

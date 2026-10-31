@@ -9,6 +9,13 @@ mix:
   gain_db_range: [-12.0, 6.0]
   p_stem_dropped: 0.15
   effects: true
+  # Rubber Band tempo/pitch at high quality costs ~1 s per stem (a snippet ~7 s on one core), so
+  # apply it to a fraction of the snippets and use several dataloader workers.
+  p_tempo: 0.3
+  tempo_ratio_range: [0.85, 1.15]
+  p_pitch: 0.3
+  pitch_semitones_range: [-3.0, 3.0]
+  pitch_drums: false
 
 train:
   epochs: 20
