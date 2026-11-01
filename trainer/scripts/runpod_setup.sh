@@ -30,7 +30,7 @@ fetch_slakh() {
     # One 104 GB tarball: stream it and keep only train + validation, without the unused mix.flac
     # (the mixer sums the stems itself). The first path component is stripped.
     curl -L --fail --retry 5 "$SLAKH_URL" \
-        | tar -xz -C "$W/slakh2100" --strip-components=1 --wildcards '*/train/*' '*/validation/*' --exclude='*/mix.flac'
+        | tar -xz --no-same-owner -C "$W/slakh2100" --strip-components=1 --wildcards '*/train/*' '*/validation/*' --exclude='*/mix.flac'
     test -d "$W/slakh2100/train" || { echo "Slakh layout is not as expected:"; ls "$W/slakh2100"; exit 1; }
     echo "Slakh: $(ls "$W/slakh2100/train" | wc -l) train, $(ls "$W/slakh2100/validation" | wc -l) validation tracks"
 }
