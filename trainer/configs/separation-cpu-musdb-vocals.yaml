@@ -1,0 +1,37 @@
+# separation-cpu-musdb.yaml without Slakh2100 (it has no vocals) and with the loss weighted towards
+# vocals, which the mixed run got badly wrong (-20 dB SI-SDR improvement on MUSDB18 test).
+# Needs MUSDB18 prepared: `mixer prepare-musdb --src ... --dst C:/workarea/MUSDB18_prepared`.
+# Anything trained on MUSDB18 is non-commercial.
+task: separation
+sources: ../repo/prototype/sources.log
+out_dir: runs/separation-cpu-musdb-vocals-1
+
+datasets:
+  - {name: musdb18-prepared, train_split: train, val_split: test, weight: 1.0}   # MUSDB18 has no validation split
+
+separation:
+  source_set: musdb4
+  n_fft: 2048
+  hop: 1024
+  base_channels: 12
+  depth: 3
+  source_weights: {vocals: 4.0}
+
+mix:
+  seconds: 3.0
+  gain_db_range: [-12.0, 6.0]
+  p_stem_dropped: 0.05   # vocals are rarely left out
+  effects: true
+  p_tempo: 0.0
+  p_pitch: 0.0
+
+train:
+  epochs: 8
+  steps_per_epoch: 150
+  batch_size: 8
+  lr: 0.002
+  num_workers: 2
+  prefetch_factor: 1
+  val_snippets: 48
+  val_seed_base: 1000000
+  seed: 0
