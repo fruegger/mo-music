@@ -1,0 +1,37 @@
+# RunPod: MUSDB18 only, stabilised (warm-up, cosine decay, clipping), vocals weight 1, 5,000 steps, seed 0.
+# Is Slakh's presence what hurts MUSDB18 vocals, or the loss weight? MUSDB18 is non-commercial.
+task: separation
+sources: configs/runpod-sources.log
+out_dir: /workspace/runs/stable-musdb-w1-5k
+
+datasets:
+  - {name: musdb18-prepared, train_split: train, val_split: test, weight: 1.0}   # MUSDB18 has no validation split
+
+separation:
+  source_set: musdb4
+  n_fft: 2048
+  hop: 1024
+  base_channels: 12
+  depth: 3
+
+mix:
+  seconds: 3.0
+  gain_db_range: [-12.0, 6.0]
+  p_stem_dropped: 0.15
+  effects: true
+  p_tempo: 0.0
+  p_pitch: 0.0
+
+train:
+  epochs: 20
+  steps_per_epoch: 250
+  batch_size: 8
+  lr: 0.0005
+  warmup_steps: 250      # linear warm-up over the first epoch
+  lr_final_fraction: 0.05   # cosine decay down to 5% of lr at the last step
+  grad_clip: 1.0
+  num_workers: 8   # runpod_setup.sh sets this to nproc - 1
+  prefetch_factor: 2
+  val_snippets: 48
+  val_seed_base: 1000000
+  seed: 0
