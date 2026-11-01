@@ -1,0 +1,40 @@
+# RunPod experiment C: runpod-vocalmix-5k.yaml with 24 base channels (about 4x the parameters).
+# Is the 12-channel model the bottleneck? MUSDB18 is non-commercial.
+task: separation
+sources: configs/runpod-sources.log
+out_dir: /workspace/runs/c24-5k
+
+datasets:
+  - name: slakh2100
+    train_split: train
+    val_split: validation
+    weight: 1.0
+    vocal_mix: {from: musdb18-prepared, split: train, p: 0.7, gain_db_range: [-6.0, 6.0]}
+  - {name: musdb18-prepared, train_split: train, val_split: test, weight: 1.0}   # MUSDB18 has no validation split
+
+separation:
+  source_set: musdb4
+  n_fft: 2048
+  hop: 1024
+  base_channels: 24
+  depth: 3
+  source_weights: {vocals: 4.0}
+
+mix:
+  seconds: 3.0
+  gain_db_range: [-12.0, 6.0]
+  p_stem_dropped: 0.15
+  effects: true
+  p_tempo: 0.0
+  p_pitch: 0.0
+
+train:
+  epochs: 20
+  steps_per_epoch: 250
+  batch_size: 8
+  lr: 0.0005
+  num_workers: 8   # runpod_setup.sh sets this to nproc - 1
+  prefetch_factor: 2
+  val_snippets: 48
+  val_seed_base: 1000000
+  seed: 0
