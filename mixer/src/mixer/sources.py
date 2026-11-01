@@ -77,7 +77,7 @@ def _lazy(fn, *args):
 
 
 def slakh_tracks(root: Path, split: str) -> Iterator[Track]:
-    """Slakh2100: `<split>/TrackNNNNN/{mix.flac, stems/Sxx.flac, metadata.yaml}`."""
+    """Slakh2100: `<split>/TrackNNNNN/{mix.flac (optional), stems/Sxx.flac, metadata.yaml}`."""
     for track_dir in sorted((root / split).glob("Track*")):
         meta = yaml.safe_load((track_dir / "metadata.yaml").read_text(encoding="utf-8"))
         stems = []
@@ -98,8 +98,16 @@ def slakh_tracks(root: Path, split: str) -> Iterator[Track]:
                     "midi" if midi.exists() else None,
                 )
             )
-        mix = sf.info(track_dir / "mix.flac")
-        yield Track("slakh2100", track_dir.name, mix.samplerate, mix.frames, stems)
+        # The mix only supplies the length and sample rate, and every stem has the same. It can be left out
+        # of a copy of the dataset (it is a tenth of the size), so fall back to the first stem.
+        mix_path = track_dir / "mix.flac"
+        if mix_path.exists():
+            ref = sf.info(mix_path)
+        elif stems:
+            ref = sf.info(track_dir / "stems" / f"{stems[0].name}.flac")
+        else:
+            continue
+        yield Track("slakh2100", track_dir.name, ref.samplerate, ref.frames, stems)
 
 
 # MUSDB18 .stem.mp4 holds five AAC streams, in this order.
