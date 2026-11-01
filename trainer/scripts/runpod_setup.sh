@@ -56,10 +56,15 @@ data)
 train)
     : "${CONFIG:?set CONFIG=configs/runpod-*.yaml}"
     : "${HOURS:?set HOURS=<max hours>, a hard cap on the run time}"
-    workers=$(( $(nproc) - 1 ))
+    # nproc can show the host's cores, not the pod's share: use the CPUs this process may run on, and cap the
+    # workers (each holds prefetched batches in RAM). Override with MAX_WORKERS=<n>.
+    cpus=$(python -c 'import os; print(len(os.sched_getaffinity(0)))')
+    workers=$(( cpus - 1 ))
+    [ "$workers" -gt "${MAX_WORKERS:-12}" ] && workers=${MAX_WORKERS:-12}
+    [ "$workers" -lt 1 ] && workers=1
     cfg=/tmp/$(basename "$CONFIG")
     sed "s/^  num_workers: .*/  num_workers: $workers/" "$CONFIG" > "$cfg"
-    echo "$(nproc) vCPUs, num_workers=$workers, GPU: $(nvidia-smi --query-gpu=name --format=csv,noheader || echo none)"
+    echo "nproc=$(nproc), usable CPUs=$cpus, num_workers=$workers, GPU: $(nvidia-smi --query-gpu=name --format=csv,noheader || echo none)"
     resume=()
     [ -n "${RESUME:-}" ] && resume=(--resume "$RESUME")
     # Do not abort on a failed/timed-out run: the termination below must still happen.
