@@ -4,6 +4,7 @@ or `trainer --config configs/separation.yaml` (source separation); the config's
 
 import argparse
 import json
+import math
 import sys
 from pathlib import Path
 
@@ -157,10 +158,23 @@ def split_lengths(total: int, weights: list[float]) -> list[int]:
     return [max(1, round(total * w)) for w in weights]
 
 
+def lr_at(step: int, total_steps: int, lr: float, warmup_steps: int = 0, final_fraction: float = 1.0) -> float:
+    """Learning rate at a global step: a linear warm-up over `warmup_steps`, then a cosine decay to
+    `final_fraction * lr` at the last step. The defaults (no warm-up, fraction 1) keep the rate constant.
+    A pure function of the step, so a resumed run continues the schedule without saving any state."""
+    if step < warmup_steps:
+        return lr * (step + 1) / warmup_steps
+    progress = min(1.0, (step - warmup_steps) / max(1, total_steps - warmup_steps))
+    return lr * (final_fraction + (1.0 - final_fraction) * 0.5 * (1.0 + math.cos(math.pi * progress)))
+
+
 def fit(task, model, train_loader, val_loader, epochs: int, steps_per_epoch: int, lr: float, device: str,
-        on_epoch=None, optimiser=None, start_epoch: int = 0, history=None, on_epoch_end=None) -> list[dict]:
+        on_epoch=None, optimiser=None, start_epoch: int = 0, history=None, on_epoch_end=None,
+        warmup_steps: int = 0, lr_final_fraction: float = 1.0, grad_clip: float | None = None) -> list[dict]:
     """The training loop, separated from the data setup so it can be tested on small loaders.
-    Runs epochs `start_epoch .. epochs - 1`; `history` is what earlier epochs reported."""
+    Runs epochs `start_epoch .. epochs - 1`; `history` is what earlier epochs reported.
+    `warmup_steps` / `lr_final_fraction` shape the learning rate (see `lr_at`); `grad_clip` limits the
+    gradient norm."""
     optimiser = optimiser or torch.optim.Adam(model.parameters(), lr=lr)
     history = list(history or [])
     for epoch in range(start_epoch, epochs):
@@ -170,9 +184,13 @@ def fit(task, model, train_loader, val_loader, epochs: int, steps_per_epoch: int
         for step, batch in enumerate(train_loader):
             if step >= steps_per_epoch:
                 break
+            for group in optimiser.param_groups:
+                group["lr"] = lr_at(epoch * steps_per_epoch + step, epochs * steps_per_epoch, lr, warmup_steps, lr_final_fraction)
             loss = task.loss(model, batch, device)
             optimiser.zero_grad()
             loss.backward()
+            if grad_clip:
+                torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
             optimiser.step()
         history.append({"epoch": epoch, "train_loss": float(loss.detach()), **evaluate_all(task, model, val_loader, device)})
         print(json.dumps(history[-1]), flush=True)
@@ -277,7 +295,9 @@ def main(argv=None):
         (out / "run.json").write_text(json.dumps(run_record(False, history), indent=1), encoding="utf-8")
 
     history = fit(task, model, train_loader, val_loader, t["epochs"], t["steps_per_epoch"], t["lr"], device,
-                  on_epoch, optimiser, start_epoch, history, on_epoch_end)
+                  on_epoch, optimiser, start_epoch, history, on_epoch_end,
+                  warmup_steps=t.get("warmup_steps", 0), lr_final_fraction=t.get("lr_final_fraction", 1.0),
+                  grad_clip=t.get("grad_clip"))
     task.export(model, out / "model.onnx", mix)
     (out / "run.json").write_text(json.dumps(run_record(True, history), indent=1), encoding="utf-8")
 

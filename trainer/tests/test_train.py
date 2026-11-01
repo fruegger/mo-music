@@ -133,3 +133,29 @@ def test_source_weights_scale_the_loss_per_source():
     assert task.source_weights.tolist() == [1.0, 1.0, 3.0, 1.0]
     with pytest.raises(ValueError):
         SeparationTask({"separation": {"source_set": "musdb4", "source_weights": {"piano": 2.0}}})
+
+
+def test_lr_schedule_warms_up_then_decays_to_the_final_fraction():
+    from trainer.train import lr_at
+
+    assert lr_at(0, 100, 1.0) == lr_at(99, 100, 1.0) == 1.0  # defaults: constant
+    assert lr_at(0, 100, 1.0, warmup_steps=10) == pytest.approx(0.1)
+    assert lr_at(9, 100, 1.0, warmup_steps=10) == pytest.approx(1.0)
+    assert lr_at(10, 100, 1.0, warmup_steps=10, final_fraction=0.1) == pytest.approx(1.0)
+    assert lr_at(55, 100, 1.0, warmup_steps=10, final_fraction=0.1) == pytest.approx(0.55)  # halfway down the cosine
+    assert lr_at(100, 100, 1.0, warmup_steps=10, final_fraction=0.1) == pytest.approx(0.1)
+
+
+def test_fit_applies_the_schedule_and_clips_the_gradient(monkeypatch):
+    task = SeparationTask(SEP_CFG)
+    train, val = loaders(task)
+    model = task.build()
+    optimiser = torch.optim.Adam(model.parameters(), lr=1.0)  # fit overrides this with the schedule
+    seen = []
+    real_clip = torch.nn.utils.clip_grad_norm_
+    monkeypatch.setattr(torch.nn.utils, "clip_grad_norm_", lambda params, max_norm: (seen.append(max_norm), real_clip(params, max_norm))[1])
+    fit(task, model, train, val, epochs=2, steps_per_epoch=2, lr=1e-3, device="cpu", optimiser=optimiser,
+        warmup_steps=2, lr_final_fraction=0.1, grad_clip=0.5)
+    assert seen == [0.5] * 4
+    # Last step is global step 3 of 4: halfway down the cosine, after the 2 warm-up steps.
+    assert optimiser.param_groups[0]["lr"] == pytest.approx(1e-3 * 0.55)
