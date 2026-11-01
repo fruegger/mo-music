@@ -6,7 +6,8 @@
 #
 # Usage on the pod (as root, in /workspace):
 #   git clone https://github.com/fruegger/mo-music.git && cd mo-music/trainer
-#   bash scripts/runpod_setup.sh data                       # once per pod: install + download data (~110 GB transfer)
+#   bash scripts/runpod_setup.sh data                       # once per pod: install + download data (~110 GB transfer);
+#                                                           #   DL_WORKERS=<n> sets the parallel connections (default 12)
 #   CONFIG=configs/runpod-smoke.yaml HOURS=0.5 bash scripts/runpod_setup.sh train
 #   CONFIG=configs/runpod-vocalmix-5k.yaml HOURS=2 AUTO_TERMINATE=1 GRACE_MIN=30 bash scripts/runpod_setup.sh train
 # Results are in the config's out_dir (checkpoint.pt, model.pt, model.onnx, run.json): download them before the pod goes.
@@ -25,14 +26,20 @@ install_code() {
 }
 
 fetch_slakh() {
-    if [ -d "$W/slakh2100/train" ] && [ -d "$W/slakh2100/validation" ]; then echo "Slakh already present"; return; fi
+    # The marker is written only after a complete, checked extraction: folders alone prove nothing,
+    # because the tarball is shuffled (every track fills up slowly and is complete only at the very end).
+    if [ -f "$W/slakh2100/.complete" ]; then echo "Slakh already present"; return; fi
     mkdir -p "$W/slakh2100"
-    # One 104 GB tarball: stream it and keep only train + validation, without the unused mix.flac
-    # (the mixer sums the stems itself). The first path component is stripped.
-    curl -L --fail --retry 5 "$SLAKH_URL" \
-        | tar -xz --no-same-owner -C "$W/slakh2100" --strip-components=1 --wildcards '*/train/*' '*/validation/*' --exclude='*/mix.flac'
-    test -d "$W/slakh2100/train" || { echo "Slakh layout is not as expected:"; ls "$W/slakh2100"; exit 1; }
-    echo "Slakh: $(ls "$W/slakh2100/train" | wc -l) train, $(ls "$W/slakh2100/validation" | wc -l) validation tracks"
+    # One 104 GB tarball with its files in random order. Zenodo gives only ~2-5 MB/s per connection, so
+    # fetch it over several connections at once (DL_WORKERS) and stream it into tar, keeping only train and
+    # validation, without the unused mix.flac (the mixer sums the stems itself). The first path component is stripped.
+    python "$(dirname "$0")/parallel_stream.py" "$SLAKH_URL" --workers "${DL_WORKERS:-12}"         | tar -xz --no-same-owner -C "$W/slakh2100" --strip-components=1 --wildcards '*/train/*' '*/validation/*' --exclude='*/mix.flac'
+    n_train=$(ls "$W/slakh2100/train" | wc -l); n_val=$(ls "$W/slakh2100/validation" | wc -l)
+    echo "Slakh: $n_train train, $n_val validation tracks"
+    [ "$n_train" -eq 1289 ] && [ "$n_val" -eq 270 ] || { echo "unexpected track counts (want 1289 / 270)"; exit 1; }
+    # Every kept track should have its stems now.
+    [ "$(find "$W/slakh2100/train" "$W/slakh2100/validation" -name '*.flac' | wc -l)" -gt 10000 ] || { echo "too few stem files"; exit 1; }
+    touch "$W/slakh2100/.complete"
 }
 
 fetch_musdb() {
