@@ -71,6 +71,10 @@ train)
     [ "$workers" -lt 1 ] && workers=1
     cfg=/tmp/$(basename "$CONFIG")
     sed "s/^  num_workers: .*/  num_workers: $workers/" "$CONFIG" > "$cfg"
+    # SEED=<n> overrides the config's seed and adds -s<n> to its out_dir, so one config can be run for several seeds.
+    if [ -n "${SEED:-}" ]; then
+        sed -i -e "s/^  seed: .*/  seed: $SEED/" -e 's#^out_dir: \(.*\)$#out_dir: \1'"-s$SEED"'#' "$cfg"
+    fi
     echo "nproc=$(nproc), usable CPUs=$cpus, num_workers=$workers, GPU: $(nvidia-smi --query-gpu=name --format=csv,noheader || echo none)"
     resume=()
     [ -n "${RESUME:-}" ] && resume=(--resume "$RESUME")
