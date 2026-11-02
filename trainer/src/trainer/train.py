@@ -6,6 +6,7 @@ import argparse
 import json
 import math
 import sys
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
 
 import torch
@@ -60,12 +61,48 @@ class InstrumentTask:
         )
 
 
+class Ema:
+    """Exponential moving average of a model's weights (`decay` close to 1, e.g. 0.999). The average is smoother and
+    usually better than the raw weights, so it is what gets evaluated and saved. Early on the decay is ramped up
+    so the average does not drag the random initial weights along. Non-float state (batch counters) is copied."""
+
+    def __init__(self, model: nn.Module, decay: float):
+        self.decay, self.updates = decay, 0
+        self.shadow = {k: v.detach().clone() for k, v in model.state_dict().items()}
+
+    @torch.no_grad()
+    def update(self, model: nn.Module) -> None:
+        self.updates += 1
+        decay = min(self.decay, (1 + self.updates) / (10 + self.updates))
+        for k, v in model.state_dict().items():
+            if v.is_floating_point():
+                self.shadow[k].mul_(decay).add_(v.detach(), alpha=1.0 - decay)
+            else:
+                self.shadow[k].copy_(v)
+
+    @contextmanager
+    def applied(self, model: nn.Module):
+        """Inside the block the model holds the averaged weights; afterwards its own weights come back."""
+        backup = {k: v.detach().clone() for k, v in model.state_dict().items()}
+        model.load_state_dict(self.shadow)
+        try:
+            yield
+        finally:
+            model.load_state_dict(backup)
+
+    def state_dict(self) -> dict:
+        return {"shadow": self.shadow, "updates": self.updates}
+
+    def load_state_dict(self, state: dict) -> None:
+        self.shadow, self.updates = state["shadow"], state["updates"]
+
+
 class SeparationTask:
     name = "separation"
 
     def __init__(self, cfg: dict):
         self.cfg = cfg
-        self.sep = {"source_set": "musdb4", "n_fft": 2048, "hop": 512, "base_channels": 16, "depth": 3, **cfg.get("separation", {})}
+        self.sep = {"source_set": "musdb4", "n_fft": 2048, "hop": 512, "base_channels": 16, "depth": 3, "mask": "sigmoid", **cfg.get("separation", {})}
         self.dataset_kwargs = {"source_set": self.sep["source_set"]}
         # Optional per-source loss weights ({name: weight}, default 1), e.g. to favour vocals.
         names = source_names(self.sep["source_set"])
@@ -77,7 +114,7 @@ class SeparationTask:
 
     def build(self) -> nn.Module:
         s = self.sep
-        return Separator(len(source_names(s["source_set"])), 2, s["n_fft"], s["hop"], s["base_channels"], s["depth"])
+        return Separator(len(source_names(s["source_set"])), 2, s["n_fft"], s["hop"], s["base_channels"], s["depth"], s["mask"])
 
     def loss(self, model, batch, device):
         estimates = model(batch["mix"].to(device))
@@ -116,6 +153,7 @@ class SeparationTask:
                     "sample_rate": sample_rate,
                     "channels": 2,
                     "frames_multiple_of": 2 ** sep["depth"],
+                    "mask": sep["mask"],
                     "note": "input: |STFT| without the Nyquist bin, (batch, 2, n_fft/2, frames); output masks in [0,1], "
                     "(batch, sources, 2, n_fft/2, frames), applied to the complex STFT (Nyquist bin: mask 0)",
                 },
@@ -170,11 +208,12 @@ def lr_at(step: int, total_steps: int, lr: float, warmup_steps: int = 0, final_f
 
 def fit(task, model, train_loader, val_loader, epochs: int, steps_per_epoch: int, lr: float, device: str,
         on_epoch=None, optimiser=None, start_epoch: int = 0, history=None, on_epoch_end=None,
-        warmup_steps: int = 0, lr_final_fraction: float = 1.0, grad_clip: float | None = None) -> list[dict]:
+        warmup_steps: int = 0, lr_final_fraction: float = 1.0, grad_clip: float | None = None,
+        ema: Ema | None = None) -> list[dict]:
     """The training loop, separated from the data setup so it can be tested on small loaders.
     Runs epochs `start_epoch .. epochs - 1`; `history` is what earlier epochs reported.
     `warmup_steps` / `lr_final_fraction` shape the learning rate (see `lr_at`); `grad_clip` limits the
-    gradient norm."""
+    gradient norm. With an `ema`, the averaged weights are updated after every step and used for the evaluation."""
     optimiser = optimiser or torch.optim.Adam(model.parameters(), lr=lr)
     history = list(history or [])
     for epoch in range(start_epoch, epochs):
@@ -192,21 +231,28 @@ def fit(task, model, train_loader, val_loader, epochs: int, steps_per_epoch: int
             if grad_clip:
                 torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
             optimiser.step()
-        history.append({"epoch": epoch, "train_loss": float(loss.detach()), **evaluate_all(task, model, val_loader, device)})
+            if ema is not None:
+                ema.update(model)
+        with ema.applied(model) if ema is not None else nullcontext():
+            scores = evaluate_all(task, model, val_loader, device)
+        history.append({"epoch": epoch, "train_loss": float(loss.detach()), **scores})
         print(json.dumps(history[-1]), flush=True)
         if on_epoch_end is not None:
             on_epoch_end(epoch, history, optimiser)
     return history
 
 
-def save_checkpoint(path: Path, model, optimiser, epochs_done: int, history: list[dict]) -> None:
-    """Everything needed to continue: weights, optimiser state, finished epochs, their results."""
+def save_checkpoint(path: Path, model, optimiser, epochs_done: int, history: list[dict], ema: Ema | None = None) -> None:
+    """Everything needed to continue: weights, optimiser state, finished epochs, their results, the EMA if any."""
     tmp = path.with_suffix(".tmp")
-    torch.save({"model": model.state_dict(), "optimizer": optimiser.state_dict(), "epoch": epochs_done, "history": history}, tmp)
+    state = {"model": model.state_dict(), "optimizer": optimiser.state_dict(), "epoch": epochs_done, "history": history}
+    if ema is not None:
+        state["ema"] = ema.state_dict()
+    torch.save(state, tmp)
     tmp.replace(path)  # never leave a half-written checkpoint behind if the process is killed
 
 
-def load_checkpoint(path: Path, model, optimiser=None, epochs_done: int | None = None) -> tuple[int, list[dict]]:
+def load_checkpoint(path: Path, model, optimiser=None, epochs_done: int | None = None, ema: Ema | None = None) -> tuple[int, list[dict]]:
     """Loads a `save_checkpoint` file, or a bare `model.pt` state dict (weights only: the optimiser
     starts fresh and `epochs_done` says how many epochs it stands for). Returns `(epochs done, history)`."""
     data = torch.load(path, map_location="cpu")
@@ -214,10 +260,14 @@ def load_checkpoint(path: Path, model, optimiser=None, epochs_done: int | None =
         model.load_state_dict(data["model"])
         if optimiser is not None:
             optimiser.load_state_dict(data["optimizer"])
+        if ema is not None and "ema" in data:
+            ema.load_state_dict(data["ema"])
         return data["epoch"], data["history"]
     if epochs_done is None:
         raise ValueError(f"{path} holds weights only: say how many epochs it stands for (--start-epoch)")
     model.load_state_dict(data)
+    if ema is not None:
+        ema.shadow = {k: v.detach().clone() for k, v in model.state_dict().items()}  # weights only: start the average here
     return epochs_done, []
 
 
@@ -264,12 +314,13 @@ def main(argv=None):
 
     model = task.build().to(device)
     optimiser = torch.optim.Adam(model.parameters(), lr=t["lr"])
+    ema = Ema(model, t["ema_decay"]) if t.get("ema_decay") else None  # evaluate and save the averaged weights
     out = Path(cfg["out_dir"])
     out.mkdir(parents=True, exist_ok=True)
 
     start_epoch, history = 0, []
     if args.resume:
-        start_epoch, history = load_checkpoint(args.resume, model, optimiser, args.start_epoch)
+        start_epoch, history = load_checkpoint(args.resume, model, optimiser, args.start_epoch, ema)
         print(f"resumed from {args.resume}: {start_epoch} epochs done, continuing to {t['epochs']}", flush=True)
 
     def run_record(finished: bool, history: list[dict]) -> dict:
@@ -290,15 +341,16 @@ def main(argv=None):
 
     def on_epoch_end(epoch, history, optimiser):
         # After every epoch: a killed run loses at most one epoch.
-        save_checkpoint(out / "checkpoint.pt", model, optimiser, epoch + 1, history)
-        torch.save(model.state_dict(), out / "model.pt")
+        save_checkpoint(out / "checkpoint.pt", model, optimiser, epoch + 1, history, ema)
+        torch.save(ema.shadow if ema is not None else model.state_dict(), out / "model.pt")
         (out / "run.json").write_text(json.dumps(run_record(False, history), indent=1), encoding="utf-8")
 
     history = fit(task, model, train_loader, val_loader, t["epochs"], t["steps_per_epoch"], t["lr"], device,
                   on_epoch, optimiser, start_epoch, history, on_epoch_end,
                   warmup_steps=t.get("warmup_steps", 0), lr_final_fraction=t.get("lr_final_fraction", 1.0),
-                  grad_clip=t.get("grad_clip"))
-    task.export(model, out / "model.onnx", mix)
+                  grad_clip=t.get("grad_clip"), ema=ema)
+    with ema.applied(model) if ema is not None else nullcontext():
+        task.export(model, out / "model.onnx", mix)
     (out / "run.json").write_text(json.dumps(run_record(True, history), indent=1), encoding="utf-8")
 
 

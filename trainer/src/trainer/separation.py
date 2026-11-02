@@ -21,11 +21,15 @@ def conv_block(cin: int, cout: int) -> nn.Sequential:
 class SeparationNet(nn.Module):
     """`(batch, channels, freq, time)` magnitudes -> `(batch, sources, channels, freq, time)` masks in [0, 1].
 
+    `mask` is `"sigmoid"` (each source's mask on its own) or `"softmax"` (the masks of the sources add up to 1
+    in every time-frequency bin, so the estimates add up to the mixture).
     `freq` and `time` must be divisible by `2 ** depth` (the `Separator` pads)."""
 
-    def __init__(self, n_sources: int, n_channels: int = 2, base: int = 16, depth: int = 3):
+    def __init__(self, n_sources: int, n_channels: int = 2, base: int = 16, depth: int = 3, mask: str = "sigmoid"):
         super().__init__()
-        self.n_sources, self.n_channels, self.depth = n_sources, n_channels, depth
+        if mask not in ("sigmoid", "softmax"):
+            raise ValueError(f"mask must be 'sigmoid' or 'softmax', not {mask!r}")
+        self.n_sources, self.n_channels, self.depth, self.mask = n_sources, n_channels, depth, mask
         widths = [base * 2**i for i in range(depth + 1)]
         self.down = nn.ModuleList([conv_block(n_channels if i == 0 else widths[i - 1], widths[i]) for i in range(depth + 1)])
         self.up = nn.ModuleList([nn.ConvTranspose2d(widths[i + 1], widths[i], 2, stride=2) for i in range(depth)])
@@ -41,18 +45,20 @@ class SeparationNet(nn.Module):
         x = skips.pop()
         for i in reversed(range(self.depth)):
             x = self.merge[i](torch.cat([self.up[i](x), skips[i]], dim=1))
-        masks = torch.sigmoid(self.head(x))
-        b, _, f, t = masks.shape
-        return masks.view(b, self.n_sources, self.n_channels, f, t)
+        logits = self.head(x)
+        b, _, f, t = logits.shape
+        logits = logits.view(b, self.n_sources, self.n_channels, f, t)
+        return torch.softmax(logits, dim=1) if self.mask == "softmax" else torch.sigmoid(logits)
 
 
 class Separator(nn.Module):
     """STFT -> `SeparationNet` masks -> inverse STFT. `forward(mix)` takes
     `(batch, channels, samples)` and returns `(batch, sources, channels, samples)`."""
 
-    def __init__(self, n_sources: int, n_channels: int = 2, n_fft: int = 2048, hop: int = 512, base: int = 16, depth: int = 3):
+    def __init__(self, n_sources: int, n_channels: int = 2, n_fft: int = 2048, hop: int = 512, base: int = 16, depth: int = 3,
+                 mask: str = "sigmoid"):
         super().__init__()
-        self.net = SeparationNet(n_sources, n_channels, base, depth)
+        self.net = SeparationNet(n_sources, n_channels, base, depth, mask)
         self.n_fft, self.hop, self.depth = n_fft, hop, depth
         self.register_buffer("window", torch.hann_window(n_fft), persistent=False)
 

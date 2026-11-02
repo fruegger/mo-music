@@ -8,6 +8,7 @@
 #   git clone https://github.com/fruegger/mo-music.git && cd mo-music/trainer
 #   bash scripts/runpod_setup.sh data                       # once per pod: install + download data (~110 GB transfer);
 #                                                           #   DL_WORKERS=<n> sets the parallel connections (default 12)
+#   bash scripts/runpod_setup.sh data-musdb                 # MUSDB18 only (no Slakh): a 20-30 GB volume is enough
 #   CONFIG=configs/runpod-smoke.yaml HOURS=0.5 bash scripts/runpod_setup.sh train
 #   CONFIG=configs/runpod-vocalmix-5k.yaml HOURS=2 AUTO_TERMINATE=1 GRACE_MIN=30 bash scripts/runpod_setup.sh train
 # Results are in the config's out_dir (checkpoint.pt, model.pt, model.onnx, run.json): download them before the pod goes.
@@ -53,6 +54,13 @@ fetch_musdb() {
 }
 
 case "${1:-}" in
+data-musdb)
+    # MUSDB18 only (4.7 GB download, about 12 GB of disk at the peak, 7.5 GB left): no Slakh, a 20-30 GB volume is enough.
+    install_code
+    df -h "$W" | tail -1
+    fetch_musdb
+    df -h "$W" | tail -1
+    ;;
 data)
     install_code
     df -h "$W" | tail -1

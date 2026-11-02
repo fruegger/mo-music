@@ -159,3 +159,81 @@ def test_fit_applies_the_schedule_and_clips_the_gradient(monkeypatch):
     assert seen == [0.5] * 4
     # Last step is global step 3 of 4: halfway down the cosine, after the 2 warm-up steps.
     assert optimiser.param_groups[0]["lr"] == pytest.approx(1e-3 * 0.55)
+
+
+def test_ema_tracks_the_weights_and_swaps_in_and_out():
+    from trainer.train import Ema
+
+    model = torch.nn.Linear(2, 2)
+    ema = Ema(model, decay=0.5)
+    before = {k: v.clone() for k, v in model.state_dict().items()}
+    with torch.no_grad():
+        model.weight.add_(1.0)
+    ema.update(model)  # the first update uses a ramped-up decay of 2 / 11
+    d = (1 + 1) / (10 + 1)
+    assert torch.allclose(ema.shadow["weight"], d * before["weight"] + (1 - d) * model.weight, atol=1e-6)
+    own = model.weight.detach().clone()
+    with ema.applied(model):
+        assert torch.allclose(model.weight, ema.shadow["weight"])
+    assert torch.equal(model.weight, own)  # the model's own weights come back
+
+
+def test_fit_with_ema_evaluates_the_average_and_checkpoints_it(tmp_path):
+    from trainer.train import Ema, load_checkpoint, save_checkpoint
+
+    torch.manual_seed(0)
+    task = SeparationTask(SEP_CFG)
+    train, val = loaders(task, n=12)  # three batches of 4
+    model = task.build()
+    ema = Ema(model, decay=0.9)
+    optimiser = torch.optim.Adam(model.parameters(), lr=1e-2)
+    fit(task, model, train, val, epochs=1, steps_per_epoch=3, lr=1e-2, device="cpu", optimiser=optimiser, ema=ema)
+    assert ema.updates == 3
+    assert not torch.equal(ema.shadow["net.head.weight"], model.state_dict()["net.head.weight"])  # average differs from raw
+    save_checkpoint(tmp_path / "c.pt", model, optimiser, 1, [], ema)
+    other, other_ema = task.build(), Ema(task.build(), decay=0.9)
+    load_checkpoint(tmp_path / "c.pt", other, None, None, other_ema)
+    assert other_ema.updates == 3 and torch.equal(other_ema.shadow["net.head.weight"], ema.shadow["net.head.weight"])
+
+
+@pytest.mark.parametrize("mask", ["sigmoid", "softmax"])
+def test_export_with_either_mask_mode_matches_torch(tmp_path, mask):
+    torch.manual_seed(0)
+    cfg = {"separation": {**SEP_CFG["separation"], "mask": mask}}
+    task = SeparationTask(cfg)
+    model = task.build()
+    model.eval()
+    task.export(model, tmp_path / "sep.onnx", MixConfig())
+    assert json.loads((tmp_path / "sep.json").read_text())["mask"] == mask
+    session = ort.InferenceSession(str(tmp_path / "sep.onnx"))
+    magnitude = torch.rand(1, 2, 128, 16)
+    (got,) = session.run(None, {"magnitude": magnitude.numpy()})
+    assert np.allclose(got, model.net(magnitude).detach().numpy(), atol=1e-4)
+
+
+@pytest.mark.skipif(not (SLAKH / "train").exists(), reason="Slakh2100 not available")
+def test_main_with_ema_and_softmax_masks_saves_the_average_and_resumes(tmp_path):
+    cfg = {
+        "task": "separation",
+        "sources": str(Path(__file__).resolve().parents[2] / "repo" / "prototype" / "sources.log"),
+        "out_dir": str(tmp_path / "run"),
+        "datasets": [{"name": "slakh2100", "train_split": "train", "val_split": "validation"}],
+        "separation": {**SEP_CFG["separation"], "mask": "softmax"},
+        "mix": {"seconds": 1.0, "effects": False, "p_stem_dropped": 0.15, "gain_db_range": [-6.0, 3.0]},
+        "train": {"epochs": 1, "steps_per_epoch": 2, "batch_size": 2, "lr": 1e-2, "num_workers": 0,
+                  "val_snippets": 2, "val_seed_base": 1000000, "seed": 0, "ema_decay": 0.9},
+    }
+    config_path = tmp_path / "cfg.yaml"
+    config_path.write_text(yaml.safe_dump(cfg), encoding="utf-8")
+    main(["--config", str(config_path)])
+    out = tmp_path / "run"
+    saved, checkpoint = torch.load(out / "model.pt"), torch.load(out / "checkpoint.pt")
+    assert all(torch.equal(saved[k], checkpoint["ema"]["shadow"][k]) for k in saved)  # model.pt is the average
+    assert not all(torch.equal(saved[k], checkpoint["model"][k]) for k in saved)  # which differs from the raw weights
+    assert json.loads((out / "model.json").read_text())["mask"] == "softmax"
+
+    cfg["train"]["epochs"] = 2
+    config_path.write_text(yaml.safe_dump(cfg), encoding="utf-8")
+    main(["--config", str(config_path), "--resume", str(out / "checkpoint.pt")])
+    run = json.loads((out / "run.json").read_text())
+    assert [h["epoch"] for h in run["history"]] == [0, 1] and run["epochs_before_resume"] == 1

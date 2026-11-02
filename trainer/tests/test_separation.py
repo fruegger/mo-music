@@ -93,3 +93,28 @@ def test_a_tiny_model_learns_to_separate_two_sources():
     assert sum(losses[-4:]) / 4 < 0.5 * sum(losses[:4]) / 4
     scores = evaluate_separation(model, torch.utils.data.DataLoader(ds, batch_size=6), "cpu")
     assert scores["si_sdr_improvement"][1] > 0  # bass: better than leaving the mix as it is
+
+
+def test_softmax_masks_add_up_to_one_across_sources():
+    net = SeparationNet(n_sources=4, n_channels=2, base=4, depth=2, mask="softmax")
+    masks = net(torch.rand(3, 2, 32, 16))
+    assert masks.shape == (3, 4, 2, 32, 16)
+    assert torch.allclose(masks.sum(dim=1), torch.ones(3, 2, 32, 16), atol=1e-5)
+    # the default sigmoid masks do not
+    plain = SeparationNet(n_sources=4, n_channels=2, base=4, depth=2)(torch.rand(3, 2, 32, 16))
+    assert not torch.allclose(plain.sum(dim=1), torch.ones(3, 2, 32, 16), atol=1e-2)
+
+
+def test_an_unknown_mask_mode_is_rejected():
+    with pytest.raises(ValueError):
+        SeparationNet(n_sources=4, mask="relu")
+
+
+def test_softmax_separator_estimates_add_up_to_the_mixture():
+    torch.manual_seed(0)
+    model = Separator(4, mask="softmax", **TINY).eval()
+    mix = torch.randn(1, 2, 8000)
+    with torch.no_grad():
+        total = model(mix).sum(dim=1)
+    # the masks add up to 1 except in the dropped Nyquist bin, so the sum is the mixture bar one frequency bin
+    assert (total - mix).pow(2).mean() < 0.02 * mix.pow(2).mean()
