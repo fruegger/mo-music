@@ -2,7 +2,7 @@
 """One line per epoch from a run.json: improvement over the raw mix (dB) per source, per validation dataset,
 and the average of the last few epochs (a single epoch is noisy: judge a run by that average).
 
-    python scripts/summarize_run.py /workspace/runs/vocalmix-5k/run.json [more run.json ...] [--last 3]"""
+    python scripts/summarize_run.py /workspace/runs/vocalmix-5k/run.json [more run.json ...] [--last 3] [--compact]"""
 
 import argparse
 import json
@@ -28,17 +28,23 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("runs", nargs="+")
     parser.add_argument("--last", type=int, default=3, help="average this many final epochs")
+    parser.add_argument("--compact", action="store_true", help="only the last-epochs average, one line per run")
     args = parser.parse_args()
 
     for path in args.runs:
         run = json.load(open(path, encoding="utf-8"))
-        print(f"== {path}  (finished: {run['finished']})")
         per_epoch = [h["validation"] if "validation" in h else {"val": h} for h in run["history"]]
-        for h, parts in zip(run["history"], per_epoch):
-            print(f"ep {h['epoch']:>2} loss {h['train_loss']:.4f}  " + "   ".join(row(n, v) for n, v in parts.items()))
         tail = per_epoch[-args.last:]
         avg = {name: average([p[name] for p in tail]) for name in tail[0]}
-        print(f"avg of the last {len(tail)} epochs:   " + "   ".join(row(n, v) for n, v in avg.items()))
+        line = "   ".join(row(n, v) for n, v in avg.items())
+        if args.compact:
+            name = path.replace("\\", "/").rsplit("/", 2)[-2]
+            print(f"{name:<28} ep {len(per_epoch):>2}{'' if run['finished'] else '*'}  {line}")
+            continue
+        print(f"== {path}  (finished: {run['finished']})")
+        for h, parts in zip(run["history"], per_epoch):
+            print(f"ep {h['epoch']:>2} loss {h['train_loss']:.4f}  " + "   ".join(row(n, v) for n, v in parts.items()))
+        print(f"avg of the last {len(tail)} epochs:   " + line)
         print("columns: " + " ".join(f"{s:>6}" for s in SOURCES) + "  (SI-SDR improvement in dB)")
 
 

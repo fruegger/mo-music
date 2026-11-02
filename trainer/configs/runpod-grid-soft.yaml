@@ -1,0 +1,41 @@
+# MUSDB18-only architecture grid, softmax masks (they add up to the mix), otherwise the reference.
+# 5,000 steps, peak lr 0.002 with warm-up + cosine decay + clipping, stem dropout 0.05, vocals weight 4, EMA 0.999,
+# 200 validation snippets. Run with SEED=0 and SEED=1 (scripts/run_grid.sh). MUSDB18 is non-commercial.
+task: separation
+sources: configs/runpod-sources.log
+out_dir: /workspace/runs/grid-soft
+
+datasets:
+  - {name: musdb18-prepared, train_split: train, val_split: test, weight: 1.0}   # MUSDB18 has no validation split
+
+separation:
+  source_set: musdb4
+  n_fft: 2048
+  hop: 1024
+  base_channels: 12
+  depth: 3
+  mask: softmax
+  source_weights: {vocals: 4.0}
+
+mix:
+  seconds: 3.0
+  gain_db_range: [-12.0, 6.0]
+  p_stem_dropped: 0.05   # vocals are rarely left out
+  effects: true
+  p_tempo: 0.0
+  p_pitch: 0.0
+
+train:
+  epochs: 20
+  steps_per_epoch: 250
+  batch_size: 8
+  lr: 0.002
+  warmup_steps: 250
+  lr_final_fraction: 0.05
+  grad_clip: 1.0
+  num_workers: 8   # runpod_setup.sh sets this from the CPUs it finds
+  prefetch_factor: 1
+  val_snippets: 200
+  ema_decay: 0.999   # evaluate and save the averaged weights
+  val_seed_base: 1000000
+  seed: 0
