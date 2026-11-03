@@ -52,6 +52,14 @@ def test_chain_reports_applied_and_matches_the_rng_without_the_backend(monkeypat
     assert not any(r["applied"] for r in without)
 
 
+def test_missing_backend_warns_and_leaves_the_audio_clean(monkeypatch):
+    audio = make_signal()
+    monkeypatch.setattr(effects, "_pedalboard", lambda: None)
+    with pytest.warns(RuntimeWarning, match="pedalboard is not installed"):
+        out, _ = effects.apply_chain(audio, SAMPLE_RATE, np.random.default_rng(3))
+    assert np.array_equal(out, audio)
+
+
 def test_snippet_with_effects_is_deterministic_finite_and_unclipped():
     n = SAMPLE_RATE * 10
     t = np.arange(n) / SAMPLE_RATE

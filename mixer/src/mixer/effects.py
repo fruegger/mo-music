@@ -3,9 +3,11 @@
 Each effect draws its parameters from the rng it is given, returns them for
 the label file, and applies them to a `(frames, channels)` float32 array.
 The effects use `pedalboard` (install the `effects` extra) and are skipped
-when it is missing; the rng is consumed the same way either way.
+when it is missing, with a `RuntimeWarning` (once per process under the default
+warning filter); the rng is consumed the same way either way.
 """
 
+import warnings
 from dataclasses import dataclass
 from typing import Callable
 
@@ -89,6 +91,13 @@ def apply_chain(
     identically either way, so seeds stay comparable across machines."""
     records = []
     have_backend = _pedalboard() is not None
+    if not have_backend:
+        warnings.warn(
+            "effects are configured but pedalboard is not installed: they are skipped and the audio stays clean "
+            "(pip install mixer[effects])",
+            RuntimeWarning,
+            stacklevel=2,
+        )
     for effect in chain:
         fired = bool(rng.random() < effect.probability)
         params = effect.sample(rng)
