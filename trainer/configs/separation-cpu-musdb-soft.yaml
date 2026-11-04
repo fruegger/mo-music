@@ -1,3 +1,5 @@
+# NOTE: scored on CLEAN mixes (val_mix below). The first runs of this config (local-soft*-seed0/1) were scored with effects
+# on, before val_mix existed, so new runs are not comparable with them or with local-effects-seed0/1.
 # Screening: separation-cpu-musdb-vocals.yaml with softmax masks, effects on (needs pedalboard).
 # Baseline for the augmentation test; compare with local-effects-seed0/1 (sigmoid: +1.19 / +1.13).
 # separation-cpu-musdb.yaml without Slakh2100 (it has no vocals) and with the loss weighted towards
@@ -27,6 +29,9 @@ mix:
   effects: true
   p_tempo: 0.0
   p_pitch: 0.0
+
+val_mix:
+  effects: false   # train with effects, score on clean mixes (what real recordings are)
 
 train:
   epochs: 8

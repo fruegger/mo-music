@@ -1,3 +1,5 @@
+# NOTE: scored on CLEAN mixes (val_mix below). The first runs of this config (local-soft*-seed0/1) were scored with effects
+# on, before val_mix existed, so new runs are not comparable with them or with local-effects-seed0/1.
 # Screening: separation-cpu-musdb-soft.yaml plus tempo (0.85-1.15x) and pitch (+-3 semitones, not drums)
 # augmentation, each applied to half the snippets.
 # separation-cpu-musdb.yaml without Slakh2100 (it has no vocals) and with the loss weighted towards
@@ -27,6 +29,11 @@ mix:
   effects: true
   p_tempo: 0.5
   p_pitch: 0.5
+
+val_mix:
+  effects: false   # train with effects, tempo and pitch changes; score on clean mixes (what real recordings are)
+  p_tempo: 0.0
+  p_pitch: 0.0
 
 train:
   epochs: 8
