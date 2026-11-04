@@ -102,7 +102,7 @@ class SeparationTask:
 
     def __init__(self, cfg: dict):
         self.cfg = cfg
-        self.sep = {"source_set": "musdb4", "n_fft": 2048, "hop": 512, "base_channels": 16, "depth": 3, "mask": "sigmoid", **cfg.get("separation", {})}
+        self.sep = {"source_set": "musdb4", "n_fft": 2048, "hop": 512, "base_channels": 16, "depth": 3, "mask": "softmax", **cfg.get("separation", {})}
         self.dataset_kwargs = {"source_set": self.sep["source_set"]}
         # Optional per-source loss weights ({name: weight}, default 1), e.g. to favour vocals.
         names = source_names(self.sep["source_set"])

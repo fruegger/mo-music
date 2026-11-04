@@ -25,7 +25,7 @@ class SeparationNet(nn.Module):
     in every time-frequency bin, so the estimates add up to the mixture).
     `freq` and `time` must be divisible by `2 ** depth` (the `Separator` pads)."""
 
-    def __init__(self, n_sources: int, n_channels: int = 2, base: int = 16, depth: int = 3, mask: str = "sigmoid"):
+    def __init__(self, n_sources: int, n_channels: int = 2, base: int = 16, depth: int = 3, mask: str = "softmax"):
         super().__init__()
         if mask not in ("sigmoid", "softmax"):
             raise ValueError(f"mask must be 'sigmoid' or 'softmax', not {mask!r}")
@@ -56,7 +56,7 @@ class Separator(nn.Module):
     `(batch, channels, samples)` and returns `(batch, sources, channels, samples)`."""
 
     def __init__(self, n_sources: int, n_channels: int = 2, n_fft: int = 2048, hop: int = 512, base: int = 16, depth: int = 3,
-                 mask: str = "sigmoid"):
+                 mask: str = "softmax"):
         super().__init__()
         self.net = SeparationNet(n_sources, n_channels, base, depth, mask)
         self.n_fft, self.hop, self.depth = n_fft, hop, depth

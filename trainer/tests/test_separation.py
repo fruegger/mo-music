@@ -100,9 +100,14 @@ def test_softmax_masks_add_up_to_one_across_sources():
     masks = net(torch.rand(3, 2, 32, 16))
     assert masks.shape == (3, 4, 2, 32, 16)
     assert torch.allclose(masks.sum(dim=1), torch.ones(3, 2, 32, 16), atol=1e-5)
-    # the default sigmoid masks do not
-    plain = SeparationNet(n_sources=4, n_channels=2, base=4, depth=2)(torch.rand(3, 2, 32, 16))
+    # sigmoid masks do not
+    plain = SeparationNet(n_sources=4, n_channels=2, base=4, depth=2, mask="sigmoid")(torch.rand(3, 2, 32, 16))
     assert not torch.allclose(plain.sum(dim=1), torch.ones(3, 2, 32, 16), atol=1e-2)
+
+
+def test_softmax_is_the_default_mask():
+    assert SeparationNet(n_sources=4, base=4, depth=2).mask == "softmax"
+    assert Separator(4, **TINY).net.mask == "softmax"
 
 
 def test_an_unknown_mask_mode_is_rejected():
