@@ -11,7 +11,7 @@ from mixer import MixConfig
 from torch.utils.data import DataLoader
 
 from trainer.data import SnippetDataset
-from trainer.train import InstrumentTask, SeparationTask, fit, main
+from trainer.train import InstrumentTask, SeparationTask, fit, main, validation_mix
 
 SLAKH = Path(r"C:/workarea/slakh2100")
 SEP_CFG = {"separation": {"source_set": "musdb4", "n_fft": 256, "hop": 64, "base_channels": 4, "depth": 2}}
@@ -237,3 +237,11 @@ def test_main_with_ema_and_softmax_masks_saves_the_average_and_resumes(tmp_path)
     main(["--config", str(config_path), "--resume", str(out / "checkpoint.pt")])
     run = json.loads((out / "run.json").read_text())
     assert [h["epoch"] for h in run["history"]] == [0, 1] and run["epochs_before_resume"] == 1
+
+
+def test_validation_mix_defaults_to_the_training_mix_and_val_mix_overrides_it():
+    cfg = {"mix": {"seconds": 3.0, "effects": True, "p_stem_dropped": 0.05}}
+    assert validation_mix(cfg) == MixConfig.from_dict(cfg["mix"])  # no val_mix: unchanged behaviour
+    clean = validation_mix({**cfg, "val_mix": {"effects": False}})
+    assert clean.effects is False and clean.seconds == 3.0 and clean.p_stem_dropped == 0.05  # only the named keys change
+    assert MixConfig.from_dict(cfg["mix"]).effects is True  # the training mix is untouched

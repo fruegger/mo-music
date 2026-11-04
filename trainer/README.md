@@ -58,6 +58,9 @@ are tested against PyTorch with onnxruntime. The exporter needs `onnxscript`.
 
 - training: seed = epoch-dependent, so each epoch sees new mixes
 - validation: fixed seeds (`val_seed_base + index`), so scores are comparable
+- validation mix: the config's `mix`, with the optional `val_mix` entries on top. `val_mix: {effects: false}`
+  trains with effects (augmentation) but scores on clean mixes, which is what real recordings are; scores
+  with and without it are not comparable
   between runs
 - each run writes `run.json` with the dataset licences from `sources.log`; a
   run that used MUSDB18 is marked `non_commercial`

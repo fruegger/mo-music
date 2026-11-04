@@ -177,6 +177,13 @@ def evaluate_all(task, model, val_loader, device) -> dict:
     return {"validation": {name: task.evaluate(model, loader, device) for name, loader in val_loader.items()}}
 
 
+def validation_mix(cfg: dict) -> MixConfig:
+    """The mix the validation snippets are rendered with: the config's `mix` with the optional `val_mix`
+    entries on top (e.g. `val_mix: {effects: false}` trains with effects but scores on clean mixes, like
+    real recordings). Without `val_mix` validation uses the training mix."""
+    return MixConfig.from_dict({**cfg["mix"], **cfg.get("val_mix", {})})
+
+
 def build_train_set(registry, ds, d: dict, mix: MixConfig, length: int, kwargs: dict):
     """One dataset's training snippets. An optional `vocal_mix: {from, split, p, gain_db_range}` entry
     adds the vocals of another dataset (MUSDB18) to a share `p` of them, for datasets with no vocals."""
@@ -287,6 +294,7 @@ def main(argv=None):
 
     registry = load_registry(cfg["sources"])
     mix = MixConfig.from_dict(cfg["mix"])
+    val_mix = validation_mix(cfg)
     datasets = [(registry[d["name"].lower()], d) for d in cfg["datasets"]]
     # Datasets only used for their vocals still count for the licences.
     used = [ds for ds, _ in datasets] + [registry[d["vocal_mix"]["from"].lower()] for d in cfg["datasets"] if d.get("vocal_mix")]
@@ -305,7 +313,7 @@ def main(argv=None):
     # worker pools would cost memory, and 48 snippets are quick.
     val_loader = {
         ds.name: DataLoader(
-            SnippetDataset.from_dataset(ds, d["val_split"], mix, t["val_snippets"], t["val_seed_base"], **kwargs),
+            SnippetDataset.from_dataset(ds, d["val_split"], val_mix, t["val_snippets"], t["val_seed_base"], **kwargs),
             t["batch_size"],
             num_workers=t.get("val_workers", 0),
         )
