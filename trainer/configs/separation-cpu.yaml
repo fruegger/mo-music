@@ -7,6 +7,7 @@ datasets:
   - {name: slakh2100, train_split: train, val_split: validation}
 
 separation:
+  mask: sigmoid   # pinned: softmax became the default after this config was used
   source_set: musdb4
   n_fft: 2048
   hop: 1024        # coarse time resolution: half the frames, about twice as fast as hop 512

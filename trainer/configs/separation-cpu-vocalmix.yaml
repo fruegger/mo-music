@@ -18,6 +18,7 @@ datasets:
   - {name: musdb18-prepared, train_split: train, val_split: test, weight: 1.0}   # MUSDB18 has no validation split
 
 separation:
+  mask: sigmoid   # pinned: softmax became the default after this config was used
   source_set: musdb4
   n_fft: 2048
   hop: 1024
