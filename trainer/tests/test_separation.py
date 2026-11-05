@@ -6,7 +6,7 @@ from mixer import MixConfig
 
 from trainer.data import SnippetDataset
 from trainer.separation import (
-    Separator, SeparationNet, evaluate_separation, separation_loss, si_sdr,
+    Separator, SeparationNet, evaluate_separation, gate_masks, separation_loss, si_sdr,
 )
 
 TINY = dict(n_fft=256, hop=64, base=4, depth=2)
@@ -123,3 +123,35 @@ def test_softmax_separator_estimates_add_up_to_the_mixture():
         total = model(mix).sum(dim=1)
     # the masks add up to 1 except in the dropped Nyquist bin, so the sum is the mixture bar one frequency bin
     assert (total - mix).pow(2).mean() < 0.02 * mix.pow(2).mean()
+
+
+@pytest.mark.parametrize("mask", ["softmax", "sigmoid"])
+def test_all_present_gating_changes_nothing(mask):
+    torch.manual_seed(0)
+    model = Separator(4, mask=mask, **TINY).eval()
+    mix = torch.randn(2, 2, 2048) * 0.1
+    with torch.no_grad():
+        assert torch.allclose(model(mix, presence=torch.ones(2, 4)), model(mix), atol=1e-6)
+
+
+def test_gating_silences_absent_sources_and_hands_their_energy_to_the_others():
+    torch.manual_seed(0)
+    model = Separator(4, mask="softmax", **TINY).eval()
+    mix = torch.sin(2 * torch.pi * 200 * torch.arange(4096) / 44100).repeat(2, 1).unsqueeze(0) * 0.3  # no Nyquist content
+    presence = torch.tensor([[1.0, 0.0, 1.0, 1.0]])
+    with torch.no_grad():
+        plain, gated = model(mix), model(mix, presence=presence)
+    assert float(gated[:, 1].abs().max()) < 1e-6  # the absent source is silent
+    assert float(plain[:, 1].abs().max()) > 1e-4  # it was not before
+    # The softmax masks still add up to one over the sources that are left, so the estimates still add up to the mix.
+    assert torch.allclose(gated.sum(dim=1), mix, atol=2e-3)
+
+
+def test_gate_masks_renormalises_softmax_but_only_multiplies_sigmoid_and_handles_none_present():
+    masks = torch.tensor([0.5, 0.3, 0.2]).reshape(1, 3, 1, 1, 1).expand(2, 3, 2, 4, 5)
+    presence = torch.tensor([[1.0, 0.0, 1.0], [0.0, 0.0, 0.0]])
+    soft = gate_masks(masks, presence, "softmax")
+    assert torch.allclose(soft[0, :, 0, 0, 0], torch.tensor([0.5 / 0.7, 0.0, 0.2 / 0.7]))
+    assert float(soft[1].abs().max()) == 0.0  # nothing present: silent, no NaN
+    sig = gate_masks(masks, presence, "sigmoid")
+    assert torch.allclose(sig[0, :, 0, 0, 0], torch.tensor([0.5, 0.0, 0.2])) and float(sig[1].abs().max()) == 0.0

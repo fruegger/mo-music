@@ -51,9 +51,24 @@ class SeparationNet(nn.Module):
         return torch.softmax(logits, dim=1) if self.mask == "softmax" else torch.sigmoid(logits)
 
 
+def gate_masks(masks: torch.Tensor, presence: torch.Tensor, mode: str = "softmax") -> torch.Tensor:
+    """Removes the masks of the sources that are not in the song. `masks` `(batch, sources, ...)`, `presence`
+    `(batch, sources)` (1 = present, 0 = absent). Softmax masks add up to one in every time-frequency bin, so
+    after dropping the absent sources the rest are divided by their sum, `m_k g_k / sum_j(m_j g_j)`: a softmax over
+    the present sources only, which hands all the energy to sources that exist. Sigmoid masks are independent
+    and are only multiplied. If no source is present the result is silent."""
+    g = presence.to(masks.dtype).reshape(*presence.shape, *([1] * (masks.dim() - 2)))
+    gated = masks * g
+    if mode == "softmax":
+        gated = gated / gated.sum(dim=1, keepdim=True).clamp(min=1e-8)
+    return gated
+
+
 class Separator(nn.Module):
     """STFT -> `SeparationNet` masks -> inverse STFT. `forward(mix)` takes
-    `(batch, channels, samples)` and returns `(batch, sources, channels, samples)`."""
+    `(batch, channels, samples)` and returns `(batch, sources, channels, samples)`.
+    With `presence` `(batch, sources)` (1 = the source is in the song, 0 = it is not) the masks of the absent
+    sources are removed and, for softmax masks, the others renormalised (see `gate_masks`)."""
 
     def __init__(self, n_sources: int, n_channels: int = 2, n_fft: int = 2048, hop: int = 512, base: int = 16, depth: int = 3,
                  mask: str = "softmax"):
@@ -68,20 +83,30 @@ class Separator(nn.Module):
         spec = torch.stft(audio.reshape(b * c, t), self.n_fft, self.hop, window=self.window, return_complex=True)
         return spec.reshape(b, c, *spec.shape[1:])
 
-    def forward(self, mix: torch.Tensor) -> torch.Tensor:
-        b, c, t = mix.shape
-        spec = self.stft(mix)  # (b, c, F+1, frames)
+    def analyse(self, mix: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """`(batch, channels, samples)` -> the complex STFT `(b, c, F+1, frames)` and the network's masks
+        `(b, sources, c, F, frames)` (without the Nyquist bin)."""
+        spec = self.stft(mix)
         freq, frames = spec.shape[2] - 1, spec.shape[3]  # drop the Nyquist bin: keeps freq a power-of-two multiple
         pad = (-frames) % 2**self.depth
         magnitude = F.pad(spec[:, :, :freq].abs(), (0, pad))
-        masks = self.net(magnitude)[..., :frames]  # (b, s, c, freq, frames)
+        return spec, self.net(magnitude)[..., :frames]
+
+    def synthesize(self, spec: torch.Tensor, masks: torch.Tensor, length: int) -> torch.Tensor:
+        """Masks (from `analyse`, possibly gated) applied to the STFT, then the inverse STFT: `(b, sources, c, length)`."""
+        b, s, c = masks.shape[:3]
         masks = F.pad(masks, (0, 0, 0, 1))  # Nyquist bin: mask 0
         estimates = masks * spec.unsqueeze(1)
-        s = estimates.shape[1]
         out = torch.istft(
-            estimates.reshape(b * s * c, *estimates.shape[3:]), self.n_fft, self.hop, window=self.window, length=t
+            estimates.reshape(b * s * c, *estimates.shape[3:]), self.n_fft, self.hop, window=self.window, length=length
         )
-        return out.reshape(b, s, c, t)
+        return out.reshape(b, s, c, length)
+
+    def forward(self, mix: torch.Tensor, presence: torch.Tensor | None = None) -> torch.Tensor:
+        spec, masks = self.analyse(mix)
+        if presence is not None:
+            masks = gate_masks(masks, presence, self.net.mask)
+        return self.synthesize(spec, masks, mix.shape[-1])
 
 
 def separation_loss(estimates: torch.Tensor, sources: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
