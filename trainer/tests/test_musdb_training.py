@@ -129,12 +129,14 @@ def test_training_on_slakh_and_musdb_together_scores_each_dataset(tmp_path, prep
 
 
 def test_shipped_configs_name_datasets_that_the_log_knows():
-    """configs/*.yaml against the real repo/prototype/sources.log (names only: the data need not exist)."""
+    """configs/*.yaml against the sources log each one names (relative to the trainer folder, where configs are run;
+    names only: the data need not exist)."""
     from mixer import load_registry
 
-    registry = load_registry(Path(__file__).resolve().parents[2] / "repo" / "prototype" / "sources.log")
-    for path in sorted((Path(__file__).resolve().parents[1] / "configs").glob("*.yaml")):
+    trainer = Path(__file__).resolve().parents[1]
+    for path in sorted((trainer / "configs").glob("*.yaml")):
         cfg = yaml.safe_load(path.read_text(encoding="utf-8"))
+        registry = load_registry(trainer / cfg["sources"])
         MixConfig.from_dict(cfg["mix"])
         for entry in cfg["datasets"]:
-            assert entry["name"].lower() in registry, f"{path.name}: {entry['name']} is not in sources.log"
+            assert entry["name"].lower() in registry, f"{path.name}: {entry['name']} is not in {cfg['sources']}"

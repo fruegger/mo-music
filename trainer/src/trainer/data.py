@@ -6,7 +6,7 @@ from mixer import CLASSES, MixConfig, iter_tracks, render_snippet
 from mixer.vocab import EXACT_IN_MUSDB
 from torch.utils.data import Dataset
 
-from .sources import group_sources, source_names
+from .sources import GROUPS, group_sources, source_names
 
 CLASS_INDEX = {c: i for i, c in enumerate(CLASSES)}
 
@@ -51,7 +51,9 @@ class SnippetDataset(Dataset):
 
     * `instruments`: `mono` `(T,)`, `instruments` `(n_classes,)`, `instruments_mask`
     * `separation`: `mix` `(2, T)`, `sources` `(n_sources, 2, T)`, `sources_mask`
-      `(n_sources,)`; the sources of `source_set` (see `trainer.sources`)
+      `(n_sources,)`; the sources of `source_set` (see `trainer.sources`). For a set with a group (`musdb6`)
+      also `group_target` `(2, T)`, the sum of the grouped sources, and `group_mask` `(n_sources,)`, 1 on the
+      grouped sources when only their sum is known (else all 0)
     """
 
     def __init__(self, tracks, config: MixConfig, length: int, seed_base: int = 0,
@@ -110,6 +112,12 @@ class SnippetDataset(Dataset):
             item["mix"] = torch.from_numpy(np.ascontiguousarray(as_stereo(snippet.mix).T))
             item["sources"] = torch.from_numpy(np.ascontiguousarray(sources.transpose(0, 2, 1)))
             item["sources_mask"] = torch.from_numpy(mask)
+            if self.source_set in GROUPS:
+                idx = GROUPS[self.source_set]
+                group_mask = np.zeros(len(mask), dtype=np.float32)
+                group_mask[idx] = float(mask[idx].min() == 0.0)
+                item["group_target"] = torch.from_numpy(np.ascontiguousarray(sources[idx].sum(axis=0).T))
+                item["group_mask"] = torch.from_numpy(group_mask)
         return item
 
 

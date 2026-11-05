@@ -178,18 +178,23 @@ class SeparationTask:
     def loss(self, model, batch, device):
         estimates = model(batch["mix"].to(device))
         mask = batch["sources_mask"].to(device) * self.source_weights.to(device)
-        return separation_loss(estimates, batch["sources"].to(device), mask)
+        group = (batch["group_target"].to(device), batch["group_mask"].to(device)) if "group_mask" in batch else (None, None)
+        return separation_loss(estimates, batch["sources"].to(device), mask, *group)
 
     def evaluate(self, model, loader, device) -> dict:
         scores = evaluate_separation(model, loader, device)
         names = source_names(self.sep["source_set"])
         valid = [v for v, n in zip(scores["si_sdr_improvement"], scores["examples"]) if n > 0]
-        return {
+        out = {
             "si_sdr": dict(zip(names, scores["si_sdr"])),
             "si_sdr_improvement": dict(zip(names, scores["si_sdr_improvement"])),
             "examples": dict(zip(names, scores["examples"])),
-            "mean_si_sdr_improvement": sum(valid) / max(len(valid), 1),
         }
+        if "group" in scores:  # MUSDB18 items: guitar + keys + other scored as one source
+            out["group"] = scores["group"]
+            valid.append(scores["group"]["si_sdr_improvement"])
+        out["mean_si_sdr_improvement"] = sum(valid) / max(len(valid), 1)
+        return out
 
     def export(self, model, path: Path, mix: MixConfig, sample_rate: int = 44100) -> None:
         """Exports the mask network (magnitude spectrogram in, masks out). The

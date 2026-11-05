@@ -109,11 +109,21 @@ class Separator(nn.Module):
         return self.synthesize(spec, masks, mix.shape[-1])
 
 
-def separation_loss(estimates: torch.Tensor, sources: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
+def separation_loss(estimates: torch.Tensor, sources: torch.Tensor, mask: torch.Tensor,
+                    group_target: torch.Tensor | None = None, group_mask: torch.Tensor | None = None) -> torch.Tensor:
     """L1 on the waveforms, averaged over the sources whose target is known.
-    A silent source is a valid target (the model should output silence)."""
+    A silent source is a valid target (the model should output silence).
+    With `group_target` `(batch, channels, samples)` and `group_mask` `(batch, sources)`, an item whose group mask is
+    set is also supervised on the sum of the grouped estimates (its individual targets are masked out): the
+    sum counts as one more known target, so every supervised target weighs the same."""
     per_source = (estimates - sources).abs().mean(dim=(-1, -2))  # (batch, sources)
-    return (per_source * mask).sum() / mask.sum().clamp(min=1.0)
+    total, count = (per_source * mask).sum(), mask.sum()
+    if group_target is not None:
+        grouped = (estimates * group_mask[:, :, None, None]).sum(dim=1)  # (batch, channels, samples)
+        has = group_mask.amax(dim=1)  # (batch,)
+        total = total + ((grouped - group_target).abs().mean(dim=(-1, -2)) * has).sum()
+        count = count + has.sum()
+    return total / count.clamp(min=1.0)
 
 
 def si_sdr(estimate: torch.Tensor, reference: torch.Tensor, eps: float = 1e-8) -> torch.Tensor:
@@ -135,6 +145,7 @@ def evaluate_separation(model: Separator, loader, device, active_db: float = -50
     sums = torch.zeros(model.net.n_sources)
     base_sums = torch.zeros(model.net.n_sources)
     counts = torch.zeros(model.net.n_sources)
+    group = torch.zeros(3)  # sum of SI-SDR, sum of the mixture's SI-SDR, examples: for the items scored on a group sum
     with torch.no_grad():
         for batch in loader:
             mix, sources, mask = batch["mix"].to(device), batch["sources"].to(device), batch["sources_mask"]
@@ -147,6 +158,16 @@ def evaluate_separation(model: Separator, loader, device, active_db: float = -50
             sums += (score * valid).sum(dim=0)
             base_sums += (baseline * valid).sum(dim=0)
             counts += valid.sum(dim=0)
+            if "group_mask" in batch:  # items whose individual targets are unknown: score the sum of the grouped sources
+                gm, ref = batch["group_mask"], batch["group_target"]
+                ok = (gm.amax(dim=1) > 0) & (10.0 * torch.log10((ref**2).mean(dim=(-1, -2)) + 1e-12) > active_db)
+                if ok.any():
+                    group += torch.stack([(si_sdr((est * gm[:, :, None, None]).sum(dim=1), ref) * ok).sum(),
+                                          (si_sdr(mix.cpu(), ref) * ok).sum(), ok.sum().float()])
     mean = sums / counts.clamp(min=1)
     base = base_sums / counts.clamp(min=1)
-    return {"si_sdr": mean.tolist(), "si_sdr_improvement": (mean - base).tolist(), "examples": counts.tolist()}
+    out = {"si_sdr": mean.tolist(), "si_sdr_improvement": (mean - base).tolist(), "examples": counts.tolist()}
+    if group[2] > 0:
+        out["group"] = {"si_sdr": float(group[0] / group[2]), "si_sdr_improvement": float((group[0] - group[1]) / group[2]),
+                        "examples": float(group[2])}
+    return out
