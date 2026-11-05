@@ -214,9 +214,88 @@ def musdb_tracks(root: Path, split: str) -> Iterator[Track]:
         yield Track("musdb18", path.name.removesuffix(".stem.mp4"), rate, n_frames, stems)
 
 
+STUDIO_FILE = "stems.json"
+STUDIO_AUDIO = (".mp3", ".wav", ".flac")
+
+
+def studio_label(name: str) -> tuple[str | None, str, bool]:
+    """`(class, detail, is_drum)` of a studio stem from its file name (bass, drums, guit1, piano, organ, voc2, ...).
+    A stem whose content cannot be named (a `keys` bounce of several keyboard sounds) has no class, like MUSDB18's
+    `other`: it is never read as a negative for any instrument. Edit `stems.json` to correct a label."""
+    n = name.lower()
+    if n.startswith("bass"):
+        return "Bass", name, False
+    if "drum" in n:
+        return "Drums", name, True
+    if "guit" in n:
+        return "Guitar", name, False
+    if n.startswith("piano"):
+        return "Piano", name, False
+    if n.startswith("organ"):
+        return "Organ", name, False
+    if n.startswith("voc"):
+        return "Vocals", name, False
+    return None, name, False
+
+
+def prepare_studio(src: Path, dst: Path, test_songs=(), exclude=("original_timewarp",), force: bool = False,
+                   verbose: bool = False) -> int:
+    """Turns a folder of bounced stems, `src/<song>/tracks/<stem>.mp3|wav|flac` (all the same start, one file per
+    instrument), into `dst/<split>/<song>/<stem>.flac` plus `stems.json` (class of every stem). Every stem becomes
+    stereo (mono is duplicated) and is cut to the shortest one, so the stems stay aligned and always sum to the mix.
+    Songs named in `test_songs` go to `test`, the others to `train`; stems named in `exclude` are left out.
+    `stems.json` is written last, so a finished song is skipped unless `force`. Returns the number of songs written."""
+    done = 0
+    for song in sorted(p for p in Path(src).iterdir() if (p / "tracks").is_dir()):
+        split = "test" if song.name in test_songs else "train"
+        out = Path(dst) / split / song.name
+        if (out / STUDIO_FILE).exists() and not force:
+            if verbose:
+                print(f"[{split}] {song.name}: already done", flush=True)
+            continue
+        files = sorted(f for f in (song / "tracks").iterdir() if f.suffix.lower() in STUDIO_AUDIO and f.stem not in exclude)
+        if not files:
+            continue
+        if verbose:
+            print(f"[{split}] {song.name}: {', '.join(f.stem for f in files)}", flush=True)
+        audio = {}
+        for f in files:
+            data, sr = sf.read(f, dtype="float32", always_2d=True)
+            if sr != SAMPLE_RATE:
+                raise ValueError(f"{f}: sample rate {sr}, expected {SAMPLE_RATE}")
+            audio[f.stem] = np.repeat(data, 2, axis=1) if data.shape[1] == 1 else data[:, :2]
+        n = min(len(a) for a in audio.values())
+        out.mkdir(parents=True, exist_ok=True)
+        stems = []
+        for name, a in audio.items():
+            sf.write(out / f"{name}.flac", a[:n], SAMPLE_RATE)
+            label, detail, is_drum = studio_label(name)
+            stems.append({"name": name, "file": f"{name}.flac", "label": label, "source_class": name, "detail": detail,
+                          "is_drum": is_drum, "peak": round(float(np.abs(a[:n]).max()), 4)})
+        meta = {"sample_rate": SAMPLE_RATE, "frames": n, "stems": stems}
+        (out / STUDIO_FILE).write_text(json.dumps(meta, indent=1), encoding="utf-8")
+        done += 1
+    return done
+
+
+def studio_tracks(root: Path, split: str) -> Iterator[Track]:
+    """Songs written by `prepare_studio`: aligned stereo FLAC stems with the classes in `stems.json`. No onsets."""
+    for song in sorted(p for p in (root / split).glob("*") if (p / STUDIO_FILE).exists()):
+        meta = json.loads((song / STUDIO_FILE).read_text(encoding="utf-8"))
+        stems = [
+            Stem(
+                info["name"], info["label"], info["source_class"],
+                lambda s, n, p=song / info["file"]: _read(p, s, n),
+                info["is_drum"], info["detail"],
+            )
+            for info in meta["stems"]
+        ]
+        yield Track("studio", song.name, meta["sample_rate"], meta["frames"], stems)
+
+
 # "musdb18-prepared" is the same loader on the folder `prepare_musdb` wrote (its own line in
 # sources.log, so the original path stays on record for preparing).
-LOADERS = {"slakh2100": slakh_tracks, "musdb18": musdb_tracks, "musdb18-prepared": musdb_tracks}
+LOADERS = {"slakh2100": slakh_tracks, "musdb18": musdb_tracks, "musdb18-prepared": musdb_tracks, "studio": studio_tracks}
 
 
 def iter_tracks(dataset: str, root: Path, split: str) -> Iterator[Track]:

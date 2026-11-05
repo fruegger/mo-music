@@ -1,0 +1,5 @@
+name | load url | local path | date | license
+slakh2100 | https://zenodo.org/records/4599666 | C:\workarea\slakh2100 | 27.10.2026 | CC BY 4.0
+MUSDB18 | https://zenodo.org/records/1117372 | C:\workarea\MUSDB18 | 29.10.2026 | !! NON COMMERCIAL
+MUSDB18-prepared | derived from MUSDB18 with `mixer prepare-musdb` | C:\workarea\MUSDB18_prepared | 31.10.2026 | !! NON COMMERCIAL
+studio | own recordings, bounced stems of 5 songs, prepared with `mixer prepare-studio` | C:\workarea\studio_prepared | 05.11.2026 | Original material of the user (rights held)

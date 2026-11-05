@@ -8,7 +8,7 @@ import soundfile as sf
 
 from .mix import MixConfig, render_snippet
 from .registry import load_registry
-from .sources import iter_tracks, prepare_musdb
+from .sources import iter_tracks, prepare_musdb, prepare_studio
 
 
 def parse_seeds(text: str) -> list[int]:
@@ -39,7 +39,18 @@ def main(argv=None):
     prepare.add_argument("--splits", nargs="+", default=["train", "test"])
     prepare.add_argument("--limit", type=int, help="decode at most N tracks in this run")
     prepare.add_argument("--force", action="store_true", help="redo tracks that are already prepared")
+    studio = sub.add_parser("prepare-studio", help="turn bounced stems (<song>/tracks/*.mp3|wav|flac) into aligned FLAC stems with classes")
+    studio.add_argument("--src", type=Path, required=True, help="folder with one subfolder per song, each with tracks/")
+    studio.add_argument("--dst", type=Path, required=True)
+    studio.add_argument("--test", nargs="*", default=[], help="songs that go to the test split (default: all train)")
+    studio.add_argument("--exclude", nargs="*", default=["original_timewarp"], help="stem names to leave out")
+    studio.add_argument("--force", action="store_true", help="redo songs that are already prepared")
     args = parser.parse_args(argv)
+
+    if args.cmd == "prepare-studio":
+        n = prepare_studio(args.src, args.dst, tuple(args.test), tuple(args.exclude), args.force, verbose=True)
+        print(f"prepared {n} songs in {args.dst}")
+        return
 
     if args.cmd == "prepare-musdb":
         n = prepare_musdb(args.src, args.dst, tuple(args.splits), args.limit, args.force, verbose=True)
