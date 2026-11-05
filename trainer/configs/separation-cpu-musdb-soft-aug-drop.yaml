@@ -1,0 +1,45 @@
+# Screening: separation-cpu-musdb-soft-aug.yaml with 30 % stem dropout in training (each source is left out of a
+# snippet with probability 0.3 instead of 0.05), so the separator sees silent targets often and should stop leaking
+# energy into sources that are not there. Validation keeps the natural 5 % dropout, so the score compares with the
+# soft-aug runs (+3.75 / +4.18); the gain for missing sources is measured afterwards with scripts/gating_experiment.py
+# (condition `none`, dropout 0.4: the plain soft-aug models score -6.5 dB there). Non-commercial (MUSDB18).
+task: separation
+sources: ../repo/prototype/sources.log
+out_dir: runs/local-soft-aug-drop-seed0
+
+datasets:
+  - {name: musdb18-prepared, train_split: train, val_split: test, weight: 1.0}   # MUSDB18 has no validation split
+
+separation:
+  mask: softmax
+  source_set: musdb4
+  n_fft: 2048
+  hop: 1024
+  base_channels: 12
+  depth: 3
+  source_weights: {vocals: 4.0}
+
+mix:
+  seconds: 3.0
+  gain_db_range: [-12.0, 6.0]
+  p_stem_dropped: 0.3   # training: a source is often absent
+  effects: true
+  p_tempo: 0.5
+  p_pitch: 0.5
+
+val_mix:
+  effects: false   # train with effects, tempo and pitch changes; score on clean mixes (what real recordings are)
+  p_stem_dropped: 0.05   # validate on the natural distribution, like the earlier runs
+  p_tempo: 0.0
+  p_pitch: 0.0
+
+train:
+  epochs: 8
+  steps_per_epoch: 150
+  batch_size: 8
+  lr: 0.002
+  num_workers: 5   # tempo/pitch make the loader the bottleneck
+  prefetch_factor: 1
+  val_snippets: 48
+  val_seed_base: 1000000
+  seed: 0
