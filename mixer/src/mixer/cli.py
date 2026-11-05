@@ -43,12 +43,18 @@ def main(argv=None):
     studio.add_argument("--src", type=Path, required=True, help="folder with one subfolder per song, each with tracks/")
     studio.add_argument("--dst", type=Path, required=True)
     studio.add_argument("--test", nargs="*", default=[], help="songs that go to the test split (default: all train)")
-    studio.add_argument("--exclude", nargs="*", default=["original_timewarp"], help="stem names to leave out")
+    studio.add_argument("--exclude", nargs="*", default=[], help="stem names to leave out")
+    studio.add_argument("--label", action="append", default=[], metavar="SONG/STEM=CLASS",
+                        help="set the class of one stem, e.g. 'In My Belief/original_timewarp=Vocals' (CLASS none = unknown)")
     studio.add_argument("--force", action="store_true", help="redo songs that are already prepared")
     args = parser.parse_args(argv)
 
     if args.cmd == "prepare-studio":
-        n = prepare_studio(args.src, args.dst, tuple(args.test), tuple(args.exclude), args.force, verbose=True)
+        labels = {}
+        for item in args.label:
+            key, _, value = item.rpartition("=")
+            labels[key] = None if value.lower() in ("none", "null") else value
+        n = prepare_studio(args.src, args.dst, tuple(args.test), tuple(args.exclude), args.force, verbose=True, labels=labels)
         print(f"prepared {n} songs in {args.dst}")
         return
 

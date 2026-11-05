@@ -1,6 +1,7 @@
 """Multitrack sources: tracks made of labelled stems, loaded lazily."""
 
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Iterator
@@ -11,7 +12,7 @@ import soundfile as sf
 import yaml
 
 from . import onset_detect
-from .vocab import MUSDB_CLASSES, SLAKH_CLASSES
+from .vocab import CLASSES, MUSDB_CLASSES, SLAKH_CLASSES
 
 SAMPLE_RATE = 44100
 
@@ -238,24 +239,74 @@ def studio_label(name: str) -> tuple[str | None, str, bool]:
     return None, name, False
 
 
-def prepare_studio(src: Path, dst: Path, test_songs=(), exclude=("original_timewarp",), force: bool = False,
-                   verbose: bool = False) -> int:
+def check_label(label: str | None, where: str) -> str | None:
+    """A class of the shared vocabulary, or None for an unknown mixture. Spelling and case must be exact: a misspelt
+    class would otherwise be read as `other` without any error."""
+    if label is not None and label not in CLASSES:
+        raise ValueError(f"{where}: unknown class {label!r}; use one of {', '.join(CLASSES)} or null")
+    return label
+
+
+def _without(mix_name: str, stem_names: list[str]) -> list[str] | None:
+    """The stems a mix is known to lack from its name ("mixdown_no_keys", "mixdown no drums"), else None (unknown)."""
+    match = re.search(r"(?:^|[_ ])no[_ ]([a-z]+)", mix_name.lower())
+    if not match:
+        return None
+    found = [s for s in stem_names if match.group(1)[:4] in s.lower()]
+    return found or None
+
+
+def _prepare_mixes(song: Path, out: Path, stem_names: list[str]) -> list[dict]:
+    """Copies `song/mixes/*` (finished mixes, mastered or not, karaoke, "no X" versions) to `out/mixes/*.flac` as
+    stereo. They are kept as they are: not cut to the stems' length and not claimed to equal their sum."""
+    mixes = []
+    folder = song / "mixes"
+    if not folder.is_dir():
+        return mixes
+    for f in sorted(folder.iterdir()):
+        if f.suffix.lower() not in STUDIO_AUDIO:
+            continue
+        data, sr = sf.read(f, dtype="float32", always_2d=True)
+        if sr != SAMPLE_RATE:
+            raise ValueError(f"{f}: sample rate {sr}, expected {SAMPLE_RATE}")
+        data = np.repeat(data, 2, axis=1) if data.shape[1] == 1 else data[:, :2]
+        (out / "mixes").mkdir(parents=True, exist_ok=True)
+        sf.write(out / "mixes" / f"{f.stem}.flac", data, SAMPLE_RATE)
+        mixes.append({"name": f.stem, "file": f"mixes/{f.stem}.flac", "frames": int(len(data)),
+                      "without": _without(f.stem, stem_names)})
+    return mixes
+
+
+def prepare_studio(src: Path, dst: Path, test_songs=(), exclude=(), force: bool = False, verbose: bool = False,
+                   labels: dict | None = None) -> int:
     """Turns a folder of bounced stems, `src/<song>/tracks/<stem>.mp3|wav|flac` (all the same start, one file per
     instrument), into `dst/<split>/<song>/<stem>.flac` plus `stems.json` (class of every stem). Every stem becomes
     stereo (mono is duplicated) and is cut to the shortest one, so the stems stay aligned and always sum to the mix.
     Songs named in `test_songs` go to `test`, the others to `train`; stems named in `exclude` are left out.
-    `stems.json` is written last, so a finished song is skipped unless `force`. Returns the number of songs written."""
+    `labels` overrides the class of single stems, `{"Song/stem": "Vocals" | None}`. The song's `mixes/` folder is copied
+    too (see `_prepare_mixes`). `stems.json` is written last, so a finished song is skipped unless `force`; a skipped
+    song only gets its mixes added if it has none, and your edits of `stems.json` are kept. Returns the songs written."""
+    labels = labels or {}
+    for key, value in labels.items():
+        check_label(value, f"label {key!r}")
     done = 0
     for song in sorted(p for p in Path(src).iterdir() if (p / "tracks").is_dir()):
         split = "test" if song.name in test_songs else "train"
         out = Path(dst) / split / song.name
         if (out / STUDIO_FILE).exists() and not force:
-            if verbose:
+            meta = json.loads((out / STUDIO_FILE).read_text(encoding="utf-8"))
+            if "mixes" not in meta and (song / "mixes").is_dir():  # an older preparation: add the mixes, keep the rest
+                meta["mixes"] = _prepare_mixes(song, out, [s["name"] for s in meta["stems"]])
+                (out / STUDIO_FILE).write_text(json.dumps(meta, indent=1), encoding="utf-8")
+                if verbose:
+                    print(f"[{split}] {song.name}: stems kept, {len(meta['mixes'])} mixes added", flush=True)
+            elif verbose:
                 print(f"[{split}] {song.name}: already done", flush=True)
             continue
         files = sorted(f for f in (song / "tracks").iterdir() if f.suffix.lower() in STUDIO_AUDIO and f.stem not in exclude)
         if not files:
             continue
+        skipped = sorted(f.stem for f in (song / "tracks").iterdir() if f.suffix.lower() in STUDIO_AUDIO and f.stem in exclude)
         if verbose:
             print(f"[{split}] {song.name}: {', '.join(f.stem for f in files)}", flush=True)
         audio = {}
@@ -270,9 +321,12 @@ def prepare_studio(src: Path, dst: Path, test_songs=(), exclude=("original_timew
         for name, a in audio.items():
             sf.write(out / f"{name}.flac", a[:n], SAMPLE_RATE)
             label, detail, is_drum = studio_label(name)
+            if f"{song.name}/{name}" in labels:
+                label = labels[f"{song.name}/{name}"]
             stems.append({"name": name, "file": f"{name}.flac", "label": label, "source_class": name, "detail": detail,
                           "is_drum": is_drum, "peak": round(float(np.abs(a[:n]).max()), 4)})
-        meta = {"sample_rate": SAMPLE_RATE, "frames": n, "stems": stems}
+        meta = {"sample_rate": SAMPLE_RATE, "frames": n, "stems": stems, "excluded": skipped,
+                "mixes": _prepare_mixes(song, out, [s["name"] for s in stems])}
         (out / STUDIO_FILE).write_text(json.dumps(meta, indent=1), encoding="utf-8")
         done += 1
     return done
@@ -284,13 +338,21 @@ def studio_tracks(root: Path, split: str) -> Iterator[Track]:
         meta = json.loads((song / STUDIO_FILE).read_text(encoding="utf-8"))
         stems = [
             Stem(
-                info["name"], info["label"], info["source_class"],
+                info["name"], check_label(info["label"], f"{song.name}/{info['name']}"), info["source_class"],
                 lambda s, n, p=song / info["file"]: _read(p, s, n),
                 info["is_drum"], info["detail"],
             )
             for info in meta["stems"]
         ]
         yield Track("studio", song.name, meta["sample_rate"], meta["frames"], stems)
+
+
+def studio_mixes(root: Path, split: str) -> Iterator[tuple[str, dict, Path]]:
+    """`(song, mix info, path)` for every finished mix kept by `prepare_studio`; `info["without"]` lists the stems
+    the mix is known to lack (from its name), None if unknown."""
+    for song in sorted(p for p in (root / split).glob("*") if (p / STUDIO_FILE).exists()):
+        for info in json.loads((song / STUDIO_FILE).read_text(encoding="utf-8")).get("mixes", []):
+            yield song.name, info, song / info["file"]
 
 
 # "musdb18-prepared" is the same loader on the folder `prepare_musdb` wrote (its own line in
