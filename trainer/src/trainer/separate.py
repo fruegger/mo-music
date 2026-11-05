@@ -7,6 +7,8 @@ writes `stems/<song>/drums.wav`, `bass.wav`, `vocals.wav`, `other.wav` (the name
 `--present drums,bass,other` says which sources are in the song (say, an instrumental with no vocals): the absent
 ones are removed and their share goes to the others instead of leaking into a stem that should be empty
 (see `gate_masks`); only the present stems are written. Without it every source is assumed present.
+`--recogniser RUN` finds out which sources are in the song with a trained presence run (`trainer.recognise`) and
+gates the separation the same way; `--present` overrides it.
 `--run` is a run folder with `run.json` and `model.pt`. The audio is cut into overlapping chunks that are
 cross-faded, so a whole song needs little memory; stereo 44.1 kHz is expected (other rates are resampled, mono is
 duplicated). The stems come out at the song's own level; if any would clip, all are scaled down by the same factor.
@@ -21,6 +23,7 @@ import numpy as np
 import soundfile as sf
 import torch
 
+from .recognise import load_recogniser, song_presence, window_probabilities
 from .sources import source_names
 from .train import SeparationTask
 
@@ -96,6 +99,9 @@ def main(argv=None) -> None:
     parser.add_argument("--overlap", type=float, default=2.0, help="overlap between chunks in seconds")
     parser.add_argument("--present", help="comma-separated sources that are in the song, e.g. drums,bass,other; "
                         "the others are removed (default: all)")
+    parser.add_argument("--recogniser", type=Path, help="a presence run folder: decide what is in each song automatically")
+    parser.add_argument("--threshold", type=float, default=0.5, help="recogniser: probability that counts a window as audible")
+    parser.add_argument("--min-fraction", type=float, default=0.05, help="recogniser: share of windows needed to keep a source")
     parser.add_argument("files", nargs="+", type=Path, help="audio files to separate")
     args = parser.parse_args(argv)
     sys.stdout.reconfigure(errors="replace")
@@ -107,12 +113,23 @@ def main(argv=None) -> None:
         if unknown or not wanted:
             parser.error(f"--present needs source names from {', '.join(names)}, not {args.present!r}")
         presence = torch.tensor([1.0 if n in wanted else 0.0 for n in names])
+    recogniser = load_recogniser(args.recogniser) if args.recogniser and presence is None else None
+    if recogniser is not None and recogniser[1] != names:
+        parser.error(f"the recogniser knows {recogniser[1]}, the separator {names}")
     for path in args.files:
         audio, rate = read_audio(path)
+        song_presence_ = presence
+        if recogniser is not None:
+            probs = window_probabilities(recogniser[0], audio, rate, recogniser[2], recogniser[2] / 2)
+            song_presence_ = song_presence(probs, args.threshold, args.min_fraction)
+            if song_presence_.sum() == 0:
+                song_presence_ = torch.ones_like(song_presence_)  # a recogniser that finds nothing is wrong: keep every source
+            found = [n for n, here in zip(names, song_presence_) if here]
+            print(f"{path.name}: recognised {', '.join(found)}; absent: {', '.join(n for n in names if n not in found) or 'none'}", flush=True)
         print(f"{path.name}: {audio.shape[-1] / rate:.1f} s, separating into {', '.join(names)} ...", flush=True)
-        stems = separate(model, audio, rate, args.chunk, args.overlap, presence)
+        stems = separate(model, audio, rate, args.chunk, args.overlap, song_presence_)
         out_dir = args.out / path.stem
-        keep = [i for i, n in enumerate(names) if presence is None or presence[i] > 0]
+        keep = [i for i, n in enumerate(names) if song_presence_ is None or song_presence_[i] > 0]
         gain = write_stems(out_dir, [names[i] for i in keep], audio, stems[keep], rate)
         note = f" (scaled by {gain:.2f} to avoid clipping)" if gain < 1.0 else ""
         print(f"  wrote {out_dir}{note}", flush=True)

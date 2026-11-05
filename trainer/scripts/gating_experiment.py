@@ -11,6 +11,8 @@ Scores MUSDB18 test snippets (clean mixes, 3 s) with each run, with the masks ga
   noisy       the truth with every entry flipped with probability 0.1 (a recogniser that is wrong 1 time in 10)
   self<dB>    two passes, no recogniser: a source counts as present if its first-pass estimate is above <dB>
               relative to the mix
+  pred<p>     with `--recogniser RUN` (a `presence` run): the recogniser's prediction on the 3 s mono mix, a source
+              is present if its probability is at least <p>
 
 Reported per dropout setting (`--dropout` = chance that a source is left out of a snippet, i.e. how often a source
 is absent) and condition, averaged over the runs: the mean SI-SDR improvement over the sources that are present
@@ -28,11 +30,13 @@ from mixer import MixConfig, load_registry
 from torch.utils.data import DataLoader
 
 from trainer.data import SnippetDataset
+from trainer.recognise import load_recogniser
 from trainer.separate import load_model
 from trainer.separation import si_sdr
 
 ACTIVE_DB = -50.0
 SELF_THRESHOLDS = (-20.0, -30.0, -40.0)  # dB relative to the mix
+PRED_THRESHOLDS = (0.2, 0.35, 0.5)
 FLIP = 0.1
 
 
@@ -41,7 +45,7 @@ def level_db(x: torch.Tensor) -> torch.Tensor:
     return 10.0 * torch.log10((x**2).mean(dim=(-1, -2)) + 1e-12)
 
 
-def presences(first_pass: torch.Tensor, mix: torch.Tensor, truth: torch.Tensor, generator) -> dict[str, torch.Tensor | None]:
+def presences(first_pass: torch.Tensor, mix: torch.Tensor, truth: torch.Tensor, generator, recogniser=None) -> dict[str, torch.Tensor | None]:
     """The presence vectors `(batch, sources)` of every condition for one batch."""
     oracle = (level_db(truth) > ACTIVE_DB).float()
     flips = (torch.rand(oracle.shape, generator=generator) < FLIP).float()
@@ -53,10 +57,16 @@ def presences(first_pass: torch.Tensor, mix: torch.Tensor, truth: torch.Tensor, 
         present = (rel > thr).float()
         present[present.sum(dim=1) == 0] = 1.0
         out[f"self{thr:.0f}"] = present
+    if recogniser is not None:
+        probs = recogniser(mix.mean(dim=1)).sigmoid()
+        for thr in PRED_THRESHOLDS:
+            present = (probs >= thr).float()
+            present[present.sum(dim=1) == 0] = 1.0
+            out[f"pred{thr:.2f}"] = present
     return out
 
 
-def evaluate(model, batches, generator) -> dict[str, dict[str, float]]:
+def evaluate(model, batches, generator, recogniser=None) -> dict[str, dict[str, float]]:
     sums, kept, removed, present_total, leak_sum, leak_n = {}, {}, {}, {}, {}, {}
     n_sources = None
     for mix, sources in batches:
@@ -65,7 +75,7 @@ def evaluate(model, batches, generator) -> dict[str, dict[str, float]]:
         first = model.synthesize(spec, masks, mix.shape[-1])
         active = level_db(sources) > ACTIVE_DB  # (batch, sources)
         baseline = si_sdr(mix.unsqueeze(1).expand_as(sources), sources)
-        for name, presence in presences(first, mix, sources, generator).items():
+        for name, presence in presences(first, mix, sources, generator, recogniser).items():
             est = first if presence is None else model.synthesize(spec, _gate(model, masks, presence), mix.shape[-1])
             kept_mask = active if presence is None else active & (presence > 0)
             gain = si_sdr(est, sources) - baseline  # (batch, sources)
@@ -101,6 +111,7 @@ def main() -> None:
     parser.add_argument("--snippets", type=int, default=200)
     parser.add_argument("--dropout", type=float, nargs="+", default=[0.05, 0.4])
     parser.add_argument("--sources", type=Path, default=Path("../repo/prototype/sources.log"))
+    parser.add_argument("--recogniser", type=Path, help="a presence run folder: adds the pred<p> conditions")
     parser.add_argument("--out", type=Path, help="also write the numbers as JSON")
     args = parser.parse_args()
 
@@ -108,6 +119,7 @@ def main() -> None:
     dataset = registry["musdb18-prepared"]
     base_mix = json.loads((args.runs[0] / "run.json").read_text(encoding="utf-8"))["config"]["mix"]
     models = [load_model(run)[0] for run in args.runs]
+    recogniser = load_recogniser(args.recogniser)[0] if args.recogniser else None
     torch.manual_seed(0)
     report = {}
     for dropout in args.dropout:
@@ -115,7 +127,16 @@ def main() -> None:
         data = SnippetDataset.from_dataset(dataset, "test", mix_cfg, args.snippets, 1_000_000, tasks=("separation",), source_set="musdb4")
         with torch.no_grad():
             batches = [(b["mix"], b["sources"]) for b in DataLoader(data, 8)]
-            per_model = [evaluate(m, batches, torch.Generator().manual_seed(1)) for m in models]
+            per_model = [evaluate(m, batches, torch.Generator().manual_seed(1), recogniser) for m in models]
+            if recogniser is not None:
+                print(f"\nrecogniser alone, dropout {dropout} (probability >= 0.5), per source: precision / recall / present share")
+                probs = torch.cat([recogniser(mix.mean(dim=1)).sigmoid() for mix, _ in batches])
+                truth = torch.cat([(level_db(src) > ACTIVE_DB).float() for _, src in batches])
+                for k, name in enumerate(["drums", "bass", "vocals", "other"]):
+                    pred = probs[:, k] >= 0.5
+                    tp = float((pred & (truth[:, k] > 0)).sum())
+                    prec, rec = tp / max(float(pred.sum()), 1), tp / max(float(truth[:, k].sum()), 1)
+                    print(f"  {name:7s} {prec:5.2f} / {rec:5.2f} / {float(truth[:, k].mean()):5.2f}")
         report[str(dropout)] = per_model
         print(f"\nsource dropout {dropout}: {args.snippets} snippets, {len(models)} run(s), "
               f"{per_model[0]['none']['absent_cases']} absent-source cases")

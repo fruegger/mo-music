@@ -62,6 +62,64 @@ class InstrumentTask:
         )
 
 
+class PresenceTask:
+    """Which sources are audible in a mix: multi-label, one output per source of the set (`musdb4`).
+    A source counts as present when its target is above `active_db` (-50 dB RMS, the evaluator's definition).
+    Trains on the separation items (mix and sources), so remixing and the other dataset wrappers apply; the
+    model listens to the mono mix. Used to tell the separator which masks to keep (`Separator(..., presence=)`)."""
+
+    name = "presence"
+    dataset_task = "separation"  # the data it trains on
+
+    def __init__(self, cfg: dict):
+        self.cfg = cfg
+        self.pres = {"source_set": "musdb4", "active_db": -50.0, "n_mels": 96, **cfg.get("presence", {})}
+        self.dataset_kwargs = {"source_set": self.pres["source_set"]}
+        self.names = source_names(self.pres["source_set"])
+        self.bce = nn.BCEWithLogitsLoss()
+
+    def build(self) -> nn.Module:
+        return InstrumentCnn(n_mels=self.pres["n_mels"], n_classes=len(self.names))
+
+    def labels(self, batch) -> torch.Tensor:
+        """`(batch, sources)` 1.0 where the source is audible."""
+        level = 10.0 * torch.log10((batch["sources"] ** 2).mean(dim=(-1, -2)) + 1e-12)
+        return (level > self.pres["active_db"]).float()
+
+    def loss(self, model, batch, device):
+        mono = batch["mix"].mean(dim=1).to(device)
+        return self.bce(model(mono), self.labels(batch).to(device))
+
+    def evaluate(self, model, loader, device) -> dict:
+        """Per-source precision, recall and F1 at probability 0.5, and the share of snippets where the source is present."""
+        model.eval()
+        tp = fp = fn = n = present = 0.0
+        with torch.no_grad():
+            for batch in loader:
+                pred = (model(batch["mix"].mean(dim=1).to(device)).sigmoid() > 0.5).float().cpu()
+                target = self.labels(batch)
+                tp, fp = tp + (pred * target).sum(0), fp + (pred * (1 - target)).sum(0)
+                fn, present, n = fn + ((1 - pred) * target).sum(0), present + target.sum(0), n + len(target)
+        precision, recall = tp / (tp + fp).clamp(min=1.0), tp / (tp + fn).clamp(min=1.0)
+        f1 = 2 * precision * recall / (precision + recall).clamp(min=1e-9)
+        per = lambda v: dict(zip(self.names, [round(float(x), 4) for x in v]))
+        return {"precision": per(precision), "recall": per(recall), "f1": per(f1),
+                "present_share": per(present / max(n, 1)), "mean_f1": float(f1.mean())}
+
+    def export(self, model, path: Path, mix: MixConfig, sample_rate: int = 44100) -> None:
+        """Mono audio in, one logit per source out; `<path>.json` lists the sources."""
+        model.eval()
+        torch.onnx.export(
+            model.cpu(), torch.zeros(1, int(mix.seconds * sample_rate)), path, input_names=["audio"], output_names=["logits"],
+            dynamic_axes={"audio": {0: "batch", 1: "samples"}},
+        )
+        path.with_suffix(".json").write_text(
+            json.dumps({"sources": self.names, "sample_rate": sample_rate, "seconds": mix.seconds,
+                        "active_db": self.pres["active_db"], "note": "sigmoid(logits) = probability the source is audible"}, indent=1),
+            encoding="utf-8",
+        )
+
+
 class Ema:
     """Exponential moving average of a model's weights (`decay` close to 1, e.g. 0.999). The average is smoother and
     usually better than the raw weights, so it is what gets evaluated and saved. Early on the decay is ramped up
@@ -164,7 +222,7 @@ class SeparationTask:
         )
 
 
-TASKS = {"instruments": InstrumentTask, "separation": SeparationTask}
+TASKS = {"instruments": InstrumentTask, "separation": SeparationTask, "presence": PresenceTask}
 
 
 def evaluate_all(task, model, val_loader, device) -> dict:
@@ -310,7 +368,7 @@ def main(argv=None):
     # Datasets only used for their vocals still count for the licences.
     used = [ds for ds, _ in datasets] + [registry[d["vocal_mix"]["from"].lower()] for d in cfg["datasets"] if d.get("vocal_mix")]
     train_len = t["steps_per_epoch"] * t["batch_size"]
-    kwargs = {"tasks": (task.name,), **task.dataset_kwargs}
+    kwargs = {"tasks": (getattr(task, "dataset_task", task.name),), **task.dataset_kwargs}
 
     # A dataset's optional `weight` (default 1) sets its share of the training batches.
     lengths = split_lengths(train_len, [float(d.get("weight", 1.0)) for _, d in datasets])
