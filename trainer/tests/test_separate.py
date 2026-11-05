@@ -83,3 +83,24 @@ def test_read_audio_duplicates_mono_and_drops_extra_channels(tmp_path):
     sf.write(tmp_path / "s.wav", np.zeros((100, 4), dtype=np.float32), MODEL_RATE)
     assert read_audio(tmp_path / "m.wav")[0].shape == (2, 100)
     assert read_audio(tmp_path / "s.wav")[0].shape == (2, 100)
+
+
+def test_presence_removes_absent_sources_and_the_others_still_add_up_to_the_mix(run_dir):
+    model, _ = load_model(run_dir)
+    audio = tonal(2.0)
+    presence = torch.tensor([1.0, 0.0, 0.0, 1.0])  # drums and other only
+    stems = separate(model, audio, MODEL_RATE, chunk_s=1.0, overlap_s=0.25, presence=presence)
+    assert float(stems[1].abs().max()) < 1e-5 and float(stems[2].abs().max()) < 1e-5
+    error = (stems.sum(dim=0) - audio).pow(2).mean().sqrt() / audio.pow(2).mean().sqrt()
+    assert float(error) < 0.02
+
+
+def test_main_present_writes_only_the_present_stems_and_rejects_unknown_names(run_dir, tmp_path):
+    wav = tmp_path / "song.wav"
+    sf.write(wav, tonal(1.5).T.numpy(), MODEL_RATE)
+    out = tmp_path / "out"
+    main(["--run", str(run_dir), "--out", str(out), "--present", "drums, bass,other", str(wav)])
+    assert sorted(p.name for p in (out / "song").iterdir()) == ["bass.wav", "drums.wav", "other.wav", "remainder.wav"]
+    for bad in ("guitar", "drums,piano", ","):
+        with pytest.raises(SystemExit):
+            main(["--run", str(run_dir), "--out", str(out), "--present", bad, str(wav)])

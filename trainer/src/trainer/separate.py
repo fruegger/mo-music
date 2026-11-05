@@ -4,6 +4,9 @@
 
 writes `stems/<song>/drums.wav`, `bass.wav`, `vocals.wav`, `other.wav` (the names of the model's source set), plus
 `remainder.wav` (the song minus the stems: what the model lost or added; silent for a perfect split).
+`--present drums,bass,other` says which sources are in the song (say, an instrumental with no vocals): the absent
+ones are removed and their share goes to the others instead of leaking into a stem that should be empty
+(see `gate_masks`); only the present stems are written. Without it every source is assumed present.
 `--run` is a run folder with `run.json` and `model.pt`. The audio is cut into overlapping chunks that are
 cross-faded, so a whole song needs little memory; stereo 44.1 kHz is expected (other rates are resampled, mono is
 duplicated). The stems come out at the song's own level; if any would clip, all are scaled down by the same factor.
@@ -34,10 +37,12 @@ def load_model(run: Path) -> tuple[torch.nn.Module, list[str]]:
 
 
 @torch.no_grad()
-def separate(model, audio: torch.Tensor, rate: int = MODEL_RATE, chunk_s: float = 20.0, overlap_s: float = 2.0) -> torch.Tensor:
+def separate(model, audio: torch.Tensor, rate: int = MODEL_RATE, chunk_s: float = 20.0, overlap_s: float = 2.0,
+             presence: torch.Tensor | None = None) -> torch.Tensor:
     """`audio` `(2, samples)` -> `(sources, 2, samples)`. The signal is processed in chunks of `chunk_s` seconds that
     overlap by about `overlap_s`; each chunk is weighted by a smooth window that never reaches zero and the weighted
-    outputs are divided by the summed weights, so the chunks cross-fade and the ends of the signal stay exact."""
+    outputs are divided by the summed weights, so the chunks cross-fade and the ends of the signal stay exact.
+    `presence` `(sources,)` (1 = in the song, 0 = not) gates the masks of every chunk, see `Separator.forward`."""
     total = audio.shape[-1]
     chunk = max(1, min(total, int(chunk_s * rate)))
     step = max(1, chunk - int(overlap_s * rate))
@@ -48,7 +53,7 @@ def separate(model, audio: torch.Tensor, rate: int = MODEL_RATE, chunk_s: float 
     out = weights = None
     for start in starts:
         piece = audio[:, start : start + chunk]
-        est = model(piece.unsqueeze(0))[0]  # (sources, 2, chunk)
+        est = model(piece.unsqueeze(0), presence=None if presence is None else presence.unsqueeze(0))[0]  # (sources, 2, chunk)
         if out is None:
             out = torch.zeros(est.shape[0], 2, total)
             weights = torch.zeros(total)
@@ -89,16 +94,26 @@ def main(argv=None) -> None:
     parser.add_argument("--out", type=Path, default=Path("stems"), help="output folder (one subfolder per song)")
     parser.add_argument("--chunk", type=float, default=20.0, help="chunk length in seconds")
     parser.add_argument("--overlap", type=float, default=2.0, help="overlap between chunks in seconds")
+    parser.add_argument("--present", help="comma-separated sources that are in the song, e.g. drums,bass,other; "
+                        "the others are removed (default: all)")
     parser.add_argument("files", nargs="+", type=Path, help="audio files to separate")
     args = parser.parse_args(argv)
     sys.stdout.reconfigure(errors="replace")
     model, names = load_model(args.run)
+    presence = None
+    if args.present is not None:
+        wanted = [n.strip() for n in args.present.split(",") if n.strip()]
+        unknown = sorted(set(wanted) - set(names))
+        if unknown or not wanted:
+            parser.error(f"--present needs source names from {', '.join(names)}, not {args.present!r}")
+        presence = torch.tensor([1.0 if n in wanted else 0.0 for n in names])
     for path in args.files:
         audio, rate = read_audio(path)
         print(f"{path.name}: {audio.shape[-1] / rate:.1f} s, separating into {', '.join(names)} ...", flush=True)
-        stems = separate(model, audio, rate, args.chunk, args.overlap)
+        stems = separate(model, audio, rate, args.chunk, args.overlap, presence)
         out_dir = args.out / path.stem
-        gain = write_stems(out_dir, names, audio, stems, rate)
+        keep = [i for i, n in enumerate(names) if presence is None or presence[i] > 0]
+        gain = write_stems(out_dir, [names[i] for i in keep], audio, stems[keep], rate)
         note = f" (scaled by {gain:.2f} to avoid clipping)" if gain < 1.0 else ""
         print(f"  wrote {out_dir}{note}", flush=True)
 
