@@ -94,8 +94,11 @@ class SnippetDataset(Dataset):
         return self.length
 
     def __getitem__(self, i: int) -> dict:
-        track = self.tracks[i % len(self.tracks)]
-        snippet = render_snippet(track, self.seed_base + i + self.epoch * self.length, self.config)
+        return self.render_item(self.tracks[i % len(self.tracks)], self.seed_base + i + self.epoch * self.length)
+
+    def render_item(self, track, seed: int) -> dict:
+        """The item for one rendering of `track` with `seed` (what `__getitem__` does for its own track and seed)."""
+        snippet = render_snippet(track, seed, self.config)
         labels = snippet.labels
         item = {}
         if "instruments" in self.tasks:
@@ -145,3 +148,52 @@ class VocalMixDataset(Dataset):
         item["sources_mask"] = item["sources_mask"].clone()
         item["sources_mask"][self.vocal_index] = 1.0
         return item
+
+
+class RemixDataset(Dataset):
+    """Cross-song remixing: with probability `p`, each source of an item comes from a different, randomly
+    drawn song (drums from song A, bass from song B, ...), at a random position, and the mix is their sum.
+    From N songs this gives about N**n_sources different mixes instead of N. The other items are the plain
+    ones of `base`. Each source keeps what the mixer did to it (gain, effects, tempo/pitch, dropout), and the
+    mix is scaled down to `peak` if it clips, so the sources still add up to the mix.
+
+    Needs the `musdb4` source set (every stem has a place, so the sources sum to the mix) and the separation
+    task only. Deterministic in (index, epoch); `set_epoch` reaches the wrapped datasets. Costs one rendering
+    per source for each remixed item (the other sources of a rendering are discarded), so the renderings come
+    from `donors` (default `base`): a dataset over the same tracks whose mix can be cheaper, e.g. without
+    the slow tempo and pitch changes."""
+
+    def __init__(self, base: SnippetDataset, p: float = 0.5, seed_base: int = 0, peak: float = 0.95,
+                 donors: SnippetDataset | None = None):
+        if base.tasks != ("separation",):
+            raise ValueError(f"remixing needs the separation task only, not {base.tasks}")
+        if base.source_set != "musdb4":
+            raise ValueError(f"remixing needs the musdb4 source set (the sources must add up to the mix), not {base.source_set!r}")
+        self.base, self.p, self.seed_base, self.peak = base, p, seed_base, peak
+        self.donors = donors or base
+        if self.donors.source_set != base.source_set or self.donors.tasks != base.tasks:
+            raise ValueError("the donors must use the same source set and task as the base dataset")
+
+    def set_epoch(self, epoch: int) -> None:
+        self.base.set_epoch(epoch)
+        self.donors.set_epoch(epoch)
+
+    def __len__(self) -> int:
+        return len(self.base)
+
+    def __getitem__(self, i: int) -> dict:
+        rng = np.random.default_rng([self.seed_base, i, self.base.epoch])
+        remix = rng.random() < self.p  # always the first draw, so p does not shift the others
+        if not remix:
+            return self.base[i]
+        tracks = self.donors.tracks
+        n_sources = len(source_names(self.base.source_set))
+        donor_ids = rng.integers(0, len(tracks), size=n_sources)
+        seeds = rng.integers(0, 2**31 - 1, size=n_sources)
+        items = [self.donors.render_item(tracks[int(t)], int(seed)) for t, seed in zip(donor_ids, seeds)]
+        sources = torch.stack([item["sources"][k] for k, item in enumerate(items)])
+        mask = torch.stack([item["sources_mask"][k] for k, item in enumerate(items)])
+        mix = sources.sum(dim=0)
+        scale = min(1.0, self.peak / max(float(mix.abs().max()), 1e-9))
+        return {"mix": mix * scale, "sources": sources * scale, "sources_mask": mask}
+

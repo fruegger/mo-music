@@ -4,7 +4,7 @@
     python scripts/export_snippets.py --config configs/separation-cpu-vocalmix-lr.yaml --out DIR --n 6
 
 Makes three groups: `slakh+vocals` (Slakh with a MUSDB18 vocal mixed in, always, whatever the config's p), `slakh` (plain)
-and `musdb` (plain). Needs the datasets in the config's sources log. A `levels.txt` lists the level of each source."""
+and `musdb` (plain). `musdb-remix` (only with a `remix` entry) has every source from a different song. Needs the datasets in the config's sources log. A `levels.txt` lists the level of each source."""
 
 import argparse
 from pathlib import Path
@@ -43,7 +43,9 @@ def main() -> None:
             groups["slakh+vocals"] = {**d, "vocal_mix": {**d["vocal_mix"], "p": 1.0}}
             groups["slakh"] = {k: v for k, v in d.items() if k != "vocal_mix"}
         elif d["name"].lower().startswith("musdb"):
-            groups["musdb"] = d
+            groups["musdb"] = {k: v for k, v in d.items() if k != "remix"}
+            if d.get("remix") is not None:
+                groups["musdb-remix"] = {**d, "remix": {**(d["remix"] or {}), "p": 1.0}}
 
     lines = []
     for group, d in groups.items():

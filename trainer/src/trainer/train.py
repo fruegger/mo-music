@@ -7,6 +7,7 @@ import json
 import math
 import sys
 from contextlib import contextmanager, nullcontext
+from dataclasses import replace
 from pathlib import Path
 
 import torch
@@ -15,7 +16,7 @@ from mixer import MixConfig, load_registry
 from torch import nn
 from torch.utils.data import ConcatDataset, DataLoader
 
-from .data import SnippetDataset, VocalMixDataset
+from .data import RemixDataset, SnippetDataset, VocalMixDataset
 from .model import InstrumentCnn
 from .separation import Separator, evaluate_separation, separation_loss
 from .sources import source_names
@@ -186,9 +187,19 @@ def validation_mix(cfg: dict) -> MixConfig:
 
 def build_train_set(registry, ds, d: dict, mix: MixConfig, length: int, kwargs: dict):
     """One dataset's training snippets. An optional `vocal_mix: {from, split, p, gain_db_range}` entry
-    adds the vocals of another dataset (MUSDB18) to a share `p` of them, for datasets with no vocals."""
+    adds the vocals of another dataset (MUSDB18) to a share `p` of them, for datasets with no vocals.
+    An optional `remix: {p, tempo_pitch}` entry builds a share `p` of them from different songs per source
+    (see `RemixDataset`); the songs are rendered without the config's tempo and pitch changes (they are about
+    20 times slower than everything else) unless `tempo_pitch: true`. It cannot be combined with `vocal_mix`."""
     base = SnippetDataset.from_dataset(ds, d["train_split"], mix, length, **kwargs)
-    vm = d.get("vocal_mix")
+    vm, rm = d.get("vocal_mix"), d.get("remix")
+    if vm and rm is not None:
+        raise ValueError("a dataset can have vocal_mix or remix, not both")
+    if rm is not None:  # `remix: {}` means all defaults
+        rm = rm or {}
+        donor_mix = mix if rm.get("tempo_pitch", False) else replace(mix, p_tempo=0.0, p_pitch=0.0)
+        donors = base if donor_mix == mix else SnippetDataset.from_dataset(ds, d["train_split"], donor_mix, length, **kwargs)
+        return RemixDataset(base, rm.get("p", 0.5), seed_base=20_000_000, donors=donors)
     if not vm:
         return base
     src = registry[vm["from"].lower()]

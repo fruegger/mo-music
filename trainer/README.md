@@ -18,11 +18,12 @@ trainer --config configs/separation.yaml
 
 | module | role |
 |---|---|
-| `data.py` | `SnippetDataset`: a torch `Dataset` that calls `mixer.render_snippet` on the fly; items are dicts of tensors per task; fixed seeds for validation |
+| `data.py` | `SnippetDataset`: a torch `Dataset` that calls `mixer.render_snippet` on the fly; items are dicts of tensors per task; fixed seeds for validation. `VocalMixDataset` (vocals on Slakh), `RemixDataset` (cross-song remixing) |
 | `sources.py` | groups the mixer's stems into separation sources (`musdb4` or `classes`) with a mask for unknown targets |
 | `model.py` | instrument-recognition CNN |
 | `separation.py` | `SeparationNet` (masks from magnitudes, exportable), `Separator` (STFT, masks, inverse STFT), loss, SI-SDR, evaluation |
 | `train.py` | `InstrumentTask` / `SeparationTask`, the `fit` loop, ONNX export, `run.json` |
+| `separate.py` | `python -m trainer.separate`: splits a song into stems with a trained run (see "Listening to the stems") |
 
 ## Separation targets
 
@@ -58,12 +59,46 @@ are tested against PyTorch with onnxruntime. The exporter needs `onnxscript`.
 
 - training: seed = epoch-dependent, so each epoch sees new mixes
 - validation: fixed seeds (`val_seed_base + index`), so scores are comparable
+  between runs
 - validation mix: the config's `mix`, with the optional `val_mix` entries on top. `val_mix: {effects: false}`
   trains with effects (augmentation) but scores on clean mixes, which is what real recordings are; scores
   with and without it are not comparable
-  between runs
 - each run writes `run.json` with the dataset licences from `sources.log`; a
   run that used MUSDB18 is marked `non_commercial`
+
+## Cross-song remixing
+
+MUSDB18 has 100 training songs, so a model sees the same few hundred stem combinations over and over. `remix` on
+a dataset entry builds a share `p` of the training items from *different songs per source*: the drums of one
+song, the bass of another, the vocals of a third, and so on, each at a random position. The mix is their sum, so
+the targets still add up to it.
+
+```yaml
+datasets:
+  - name: musdb18-prepared
+    train_split: train
+    val_split: test
+    remix: {p: 0.5}          # tempo_pitch: true to give the remixed songs tempo/pitch changes too
+```
+
+It needs the separation task with the `musdb4` sources, cannot be combined with `vocal_mix`, and only touches
+training (validation uses real songs). Tempo and pitch changes are about 20 times slower than everything else
+(Rubber Band), so the remixed songs are rendered without them unless `tempo_pitch: true`; the plain items of the
+same dataset keep them. `configs/separation-cpu-musdb-soft-aug-remix.yaml` is the screening config;
+`scripts/export_snippets.py --config ... --out DIR` writes plain and remixed examples (`musdb-remix_*`) as WAV
+files to listen to.
+
+## Listening to the stems
+
+```
+python -m trainer.separate --run runs/local-soft-aug-clean-seed0 song.mp3 --out stems
+```
+
+writes `stems/song/{drums,bass,vocals,other}.wav` and `remainder.wav` (the song minus the stems, silent for a
+perfect split). `--run` is a run folder with `run.json` and `model.pt` (the averaged weights if the run used an
+EMA). Anything `soundfile` reads works; the audio is processed in overlapping, cross-faded chunks (`--chunk`,
+`--overlap`), mono is duplicated and other sample rates are resampled. On a laptop CPU it takes about 4 s for
+30 s of music.
 
 ## Training on MUSDB18 as well
 

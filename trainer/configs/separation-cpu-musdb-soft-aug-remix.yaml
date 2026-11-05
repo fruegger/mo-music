@@ -1,0 +1,47 @@
+# Screening: separation-cpu-musdb-soft-aug.yaml plus cross-song remixing: half of the training items take each source
+# (drums, bass, vocals, other) from a different, randomly drawn song. Scored on clean mixes (val_mix), like the
+# soft / soft-aug runs from 2026-11-05 (soft +3.26, soft-aug +3.97, 2 seeds each). A remixed item renders 4 songs, without
+# tempo/pitch (those are 20x slower; the plain half keeps them), ~1.0 s per item on average. Non-commercial (MUSDB18).
+task: separation
+sources: ../repo/prototype/sources.log
+out_dir: runs/local-soft-aug-remix-seed0
+
+datasets:
+  - name: musdb18-prepared
+    train_split: train
+    val_split: test   # MUSDB18 has no validation split
+    weight: 1.0
+    remix: {p: 0.5}
+
+separation:
+  mask: softmax
+  source_set: musdb4
+  n_fft: 2048
+  hop: 1024
+  base_channels: 12
+  depth: 3
+  source_weights: {vocals: 4.0}
+
+mix:
+  seconds: 3.0
+  gain_db_range: [-12.0, 6.0]
+  p_stem_dropped: 0.05   # vocals are rarely left out
+  effects: true
+  p_tempo: 0.5
+  p_pitch: 0.5
+
+val_mix:
+  effects: false   # train with effects, tempo and pitch changes; score on clean mixes (what real recordings are)
+  p_tempo: 0.0
+  p_pitch: 0.0
+
+train:
+  epochs: 8
+  steps_per_epoch: 150
+  batch_size: 8
+  lr: 0.002
+  num_workers: 5   # remixing and tempo/pitch are loader-heavy
+  prefetch_factor: 1
+  val_snippets: 48
+  val_seed_base: 1000000
+  seed: 0
