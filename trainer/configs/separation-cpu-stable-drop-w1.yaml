@@ -1,0 +1,50 @@
+# Stabilised screening of the silent-target weight (separation.silent_weight = 1.0): 30 % stem dropout in training,
+# no tempo/pitch, warm-up + cosine decay + gradient clipping + weight average (the pod recipe), 1,200 steps, vocals loss weight
+# 4 as in all soft runs. Run both w1 and w3 (same seed): they differ only in the weight, so the leakage into absent sources
+# (scripts/gating_experiment.py, condition `none`, dropout 0.4) and the score at the natural 5 % tell what the weight does.
+# Compare with plain soft (+3.26 over 2 seeds, same validation). Non-commercial (MUSDB18).
+task: separation
+sources: ../repo/prototype/sources.log
+out_dir: runs/local-stable-drop-w1-seed0
+
+datasets:
+  - {name: musdb18-prepared, train_split: train, val_split: test, weight: 1.0}   # MUSDB18 has no validation split
+
+separation:
+  mask: softmax
+  source_set: musdb4
+  n_fft: 2048
+  hop: 1024
+  base_channels: 12
+  depth: 3
+  source_weights: {vocals: 4.0}
+  silent_weight: 1.0   # an error on a source whose target is silent counts 1 times
+
+mix:
+  seconds: 3.0
+  gain_db_range: [-12.0, 6.0]
+  p_stem_dropped: 0.3   # training: a source is often absent
+  effects: true
+  p_tempo: 0.0   # no tempo/pitch: they make the loader the bottleneck and have nothing to do with the question
+  p_pitch: 0.0
+
+val_mix:
+  effects: false   # train with effects, tempo and pitch changes; score on clean mixes (what real recordings are)
+  p_stem_dropped: 0.05   # validate on the natural distribution, like the earlier runs
+  p_tempo: 0.0
+  p_pitch: 0.0
+
+train:
+  epochs: 8
+  steps_per_epoch: 150
+  batch_size: 8
+  lr: 0.002
+  num_workers: 2   # without tempo/pitch rendering is fast (0.09 s per item), the model is the bottleneck
+  prefetch_factor: 1
+  val_snippets: 48
+  val_seed_base: 1000000
+  seed: 0
+  warmup_steps: 150   # one epoch
+  lr_final_fraction: 0.05   # cosine decay to 5 % of the peak
+  grad_clip: 1.0
+  ema_decay: 0.995   # evaluate and save the averaged weights (a short horizon: the run is only 1,200 steps)
