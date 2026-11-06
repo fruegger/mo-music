@@ -179,7 +179,7 @@ class SeparationTask:
         estimates = model(batch["mix"].to(device))
         mask = batch["sources_mask"].to(device) * self.source_weights.to(device)
         group = (batch["group_target"].to(device), batch["group_mask"].to(device)) if "group_mask" in batch else (None, None)
-        return separation_loss(estimates, batch["sources"].to(device), mask, *group)
+        return separation_loss(estimates, batch["sources"].to(device), mask, *group, silent_weight=float(self.sep.get("silent_weight", 1.0)))
 
     def evaluate(self, model, loader, device) -> dict:
         scores = evaluate_separation(model, loader, device)
