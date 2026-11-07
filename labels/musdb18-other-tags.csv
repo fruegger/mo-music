@@ -1,0 +1,151 @@
+﻿split,song,instruments,dominant,unsure,notes
+train,A Classic Education - NightOwl,guitar+synth pad,guitar,synth,
+train,Actions - Devil's Words,guitar,,,
+train,Actions - One Minute Smile,guitar,,,
+train,Actions - South Of The Water,guitar,,,
+train,Aimee Norwich - Child,guitar+piano,,,
+train,Alexander Ross - Goodbye Bolero,guitar+trombone+trumpet+harp,,,mostly timely separated
+train,Alexander Ross - Velvet Curtain,guitar+trumpet,,,quiet at the beginning. trumpet in second half
+train,Angela Thomas Wade - Milk Cow Blues,guitar+violin,,banjo,
+train,ANiMAL - Clinic A,synth,,,rapid sequencer
+train,ANiMAL - Easy Tiger,synth,,,some transients drum like and some mellotron
+train,ANiMAL - Rockshow,synth+vocals,,,scratch and vocal samples
+train,Atlantis Bound - It Was My Fault For Waiting,guitar+piano,,,mostly quiet. long silences
+train,Auctioneer - Our Future Faces,guitar+synth,guitar,,guitar sounds strange
+train,AvaLuna - Waterduct,guitar+synth,guitar,,mixed in noises and wind
+train,BigTroubles - Phantom,guitar,,,
+train,Bill Chudziak - Children Of No-one,guitar,,,
+train,Black Bloc - If You Want Success,guitar,,,heavy reverb
+train,Celestial Shore - Die For Us,guitar+synth,,,flanger
+train,Chris Durban - Celebrate,synth,,,drum like noises mixed in
+train,Clara Berry And Wooldog - Air Traffic,piano+guitar,,,steel guitar
+train,Clara Berry And Wooldog - Stella,piano+vibraphone,piano,,
+train,Clara Berry And Wooldog - Waltz For My Victims,piano,,,
+train,Cnoc An Tursa - Bannockburn,guitar,,,
+train,Creepoid - OldTree,guitar,,,envelope filters
+train,Dark Ride - Burning Bridges,guitar,,,djent
+train,Dreamers Of The Ghetto - Heavy Love,synth,,,noises at the beginning
+train,Drumtracks - Ghost Bitch,piano+percussion+organ,piano,,
+train,Faces On Film - Waiting For Ga,guitar,,,
+train,Fergessen - Back From The Start,guitar,,,
+train,Fergessen - Nos Palpitants,guitar+piano,,,iconic electric piano+ guitar slides
+train,Fergessen - The Wind,guitar,,,
+train,Flags - 54,synth+guitar,,,
+train,Giselle - Moss,synth+organ,,,
+train,Grants - PunchDrunk,,,,silence and noises
+train,Helado Negro - Mitad Del Mundo,organ+synth,,,hammond+percussive noises
+train,Hezekiah Jones - Borrowed Heart,guitar+vibraphone+violin+banjo,,,
+train,Hollow Ground - Left Blind,guitar,,,
+train,Hop Along - Sister Cities,guitar,,,
+train,Invisible Familiars - Disturbing Wildlife,piano+guitar+trumpet,,,separated. long silences
+train,James May - All Souls Moon,piano+violin+guitar,,,
+train,James May - Dont Let Go,guitar+flute,,trumpet+sax,
+train,James May - If You Say,guitar+accordion+clarinet,,flute,
+train,James May - On The Line,guitar+sax+strings,,banjo,
+train,Jay Menon - Through My Eyes,synth+piano+guitar,,,
+train,Johnny Lokke - Promises & Lies,guitar,,,
+train,Johnny Lokke - Whisper To A Scream,guitar,,,
+train,"Jokers, Jacks & Kings - Sea Of Leaves",guitar,,,
+train,Leaf - Come Around,guitar,guitar,,
+train,Leaf - Summerghost,guitar,,,
+train,Leaf - Wicked,guitar,,,
+train,Lushlife - Toynbee Suite,synth+vibraphone+vocals+guitar+clarinet,,,
+train,Matthew Entwistle - Dont You Ever,piano+strings,,oboe+brass,
+train,Meaxic - Take A Step,guitar,,,
+train,Meaxic - You Listen,guitar,,,
+train,Music Delta - 80s Rock,guitar,,,
+train,Music Delta - Beatles,guitar,,,
+train,Music Delta - Britpop,guitar,,,
+train,Music Delta - Country1,guitar,,,
+train,Music Delta - Country2,guitar,,,
+train,Music Delta - Disco,guitar,,,
+train,Music Delta - Gospel,guitar,,,
+train,Music Delta - Grunge,guitar,,,
+train,Music Delta - Hendrix,guitar,,,wah
+train,Music Delta - Punk,guitar,guitar,,
+train,Music Delta - Reggae,guitar,,,
+train,Music Delta - Rock,guitar,,,
+train,Music Delta - Rockabilly,guitar,,,
+train,Night Panther - Fire,synth,,,
+train,North To Alaska - All The Same,guitar,,,
+train,Patrick Talbot - A Reason To Leave,guitar,,,
+train,Patrick Talbot - Set Me Free,piano+brass+guitar,,,epiano + lesley
+train,Phre The Eon - Everybody's Falling Apart,guitar,,,
+train,Port St Willow - Stay Even,guitar+vocals,,synth,vocal leaks
+train,Remember December - C U Next Time,guitar,,,
+train,Secret Mountains - High Horse,synth+piano+guitar,,,
+train,Skelpolu - Human Mistakes,piano+synth,,guitar,
+train,Skelpolu - Together Alone,piano+guitar+synth,,,
+train,Snowmine - Curfews,piano+synth+guitar,,,drum leaks. sequencer separated
+train,Spike Mullings - Mike's Sulking,guitar,,organ,
+train,St Vitus - Word Gets Around,guitar+synth,,,quiet
+train,Steven Clark - Bounty,synth,,,
+train,Strand Of Oaks - Spacestation,synth+piano,,,
+train,Sweet Lights - You Let Me Down,piano+strings+synth,,,
+train,Swinging Steaks - Lost My Way,guitar+piano+organ,,,
+train,The Districts - Vermont,guitar,,,
+train,The Long Wait - Back Home To Blue,guitar,,,
+train,The Scarlet Brand - Les Fleurs Du Mal,guitar,,,
+train,The So So Glos - Emergency,guitar+bells,,,
+train,The Wrong'Uns - Rothko,guitar,,,
+train,Tim Taler - Stalker,guitar,,,
+train,Titanium - Haunted Age,guitar,,,
+train,Traffic Experiment - Once More (With Feeling),guitar+piano,,,
+train,Traffic Experiment - Sirens,piano+guitar+organ,,,
+train,Triviul - Angelsaint,synth+organ,,,
+train,Triviul - Dorothy,guitar+synth+organ,,,
+train,Voelund - Comfort Lives In Belief,guitar+organ,,,
+train,Wall Of Death - Femme,guitar,,,
+train,Young Griffo - Blood To Bone,guitar,,,
+train,Young Griffo - Facade,guitar,,,
+train,Young Griffo - Pennies,guitar,,,
+test,Al James - Schoolboy Facination,guitar+synth,,,
+test,AM Contra - Heart Peripheral,synth,,,
+test,Angels In Amplifiers - I'm Alright,guitar+piano,,,
+test,Arise - Run Run Run,synth+guitar,,,odd: muffled synth+ pizzicato guitar
+test,Ben Carrigan - We'll Talk About It All Tonight,piano+harp+guitar,,,
+test,BKS - Bulldozer,guitar+synth,,,
+test,BKS - Too Much,guitar,,,
+test,Bobby Nobody - Stitch Up,guitar,,,
+test,Buitraker - Revo X,synth+guitar,,,
+test,Carlos Gonzalez - A Place For Us,piano+guitar+synth,,,
+test,Cristina Vane - So Easy,piano+guitar+organ,,,phaser on the piano
+test,Detsky Sad - Walkie Talkie,guitar+synth,,,ring modulator
+test,Enda Reilly - Cur An Long Ag Seol,guitar+violin,,,
+test,Forkupines - Semantics,guitar,,,
+test,Georgia Wonder - Siren,guitar+synth,,,
+test,Girls Under Glass - We Feel Alright,synth+guitar,,,
+test,Hollow Ground - Ill Fate,guitar,,,djent
+test,James Elder & Mark M Thompson - The English Actor,synth+guitar,,,
+test,Juliet's Rescue - Heartbeats,guitar+piano+synth,,,
+test,Little Chicago's Finest - My Own,piano+synth,,,
+test,Louis Cressy Band - Good Time,guitar,,,
+test,Lyndsey Ollard - Catching Up,guitar,,,
+test,M.E.R.C. Music - Knockout,piano+synth,,,
+test,Moosmusic - Big Dummy Shake,guitar+synth,,,
+test,Motor Tapes - Shore,guitar+synth,,,
+test,Mu - Too Bright,piano+synth,,,
+test,Nerve 9 - Pray For The Rain,guitar,,,
+test,PR - Happy Daze,synth,,,
+test,PR - Oh No,synth,,,
+test,Punkdisco - Oral Hygiene,synth,,,
+test,Raft Monk - Tiring,guitar,,synth,
+test,Sambasevam Shanmugam - Kaathaadi,piano+violin+guitar+synth,,,
+test,Secretariat - Borderline,guitar,,,
+test,Secretariat - Over The Top,guitar,,,
+test,Side Effects Project - Sing With Me,,,,
+test,Signe Jakobsen - What Have You Done To Me,guitar,,,
+test,Skelpolu - Resurrection,synth,,,
+test,Speak Softly - Broken Man,piano+organ+synth,,,
+test,Speak Softly - Like Horses,piano,,,
+test,The Doppler Shift - Atrophy,synth+piano+guitar,,,
+test,The Easton Ellises (Baumi) - SDRNR,piano+synth,,,
+test,The Easton Ellises - Falcon 69,synth+guitar,,,
+test,The Long Wait - Dark Horses,guitar,,,
+test,The Mountaineering Club - Mallory,piano+organ+guitar,,,
+test,The Sunshine Garcia Band - For I Am The Moon,guitar,,,
+test,Timboz - Pony,guitar,guitar,,
+test,Tom McKenzie - Directions,guitar,,,
+test,Triviul feat. The Fiend - Widow,,,,weird truff
+test,We Fell From The Sky - Not You,guitar,,,
+test,Zeno - Signs,piano+guitar+organ,,,
