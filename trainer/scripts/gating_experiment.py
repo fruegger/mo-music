@@ -150,6 +150,8 @@ def main() -> None:
     parser.add_argument("--dropout", type=float, nargs="+", default=[0.05, 0.4])
     parser.add_argument("--sources", type=Path, default=Path("../repo/prototype/sources.log"))
     parser.add_argument("--recogniser", type=Path, help="a presence run folder: adds the pred<p> conditions")
+    parser.add_argument("--seconds", type=float, help="snippet length (default: the run's training length, 3 s); a recogniser "
+                        "trained on 10 s clips hears what it was trained on with 10")
     parser.add_argument("--out", type=Path, help="also write the numbers as JSON")
     args = parser.parse_args()
 
@@ -164,7 +166,7 @@ def main() -> None:
     torch.manual_seed(0)
     report = {}
     for dropout in args.dropout:
-        mix_cfg = MixConfig.from_dict({**base_mix, "effects": False, "p_tempo": 0.0, "p_pitch": 0.0, "p_stem_dropped": dropout})
+        mix_cfg = MixConfig.from_dict({**base_mix, "effects": False, **({"seconds": args.seconds} if args.seconds else {}), "p_tempo": 0.0, "p_pitch": 0.0, "p_stem_dropped": dropout})
         data = SnippetDataset.from_dataset(dataset, "test", mix_cfg, args.snippets, 1_000_000, tasks=("separation",), source_set=source_set)
         with torch.no_grad():
             batches = [(b["mix"], b["sources"]) for b in DataLoader(data, 8)]
