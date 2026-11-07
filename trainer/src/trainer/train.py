@@ -267,7 +267,6 @@ class SeparationTask:
     def __init__(self, cfg: dict):
         self.cfg = cfg
         self.sep = {"source_set": "musdb4", "n_fft": 2048, "hop": 512, "base_channels": 16, "depth": 3, "mask": "softmax", **cfg.get("separation", {})}
-        self.dataset_kwargs = {"source_set": self.sep["source_set"]}
         # Optional per-source loss weights ({name: weight}, default 1), e.g. to favour vocals.
         names = source_names(self.sep["source_set"])
         weights = self.sep.get("source_weights", {})
@@ -275,6 +274,17 @@ class SeparationTask:
         if unknown:
             raise ValueError(f"source_weights names unknown sources {sorted(unknown)}; the set has {names}")
         self.source_weights = torch.tensor([float(weights.get(n, 1.0)) for n in names])
+
+    @property
+    def dataset_kwargs(self) -> dict:
+        """Read when the data is built (so a model loaded for inference never needs the tag file). With `separation.tags`
+        (the CSV of `trainer.tags`) a MUSDB18 `other` stem tagged with exactly one of the group sources (guitar only, ...)
+        is that source when `separation.promote_single` is on: its targets are then all known instead of only their sum."""
+        kwargs = {"source_set": self.sep["source_set"]}
+        if self.sep.get("tags"):
+            kwargs["source_tags"] = load_other_tags(Path(self.sep["tags"]), self.sep["source_set"])
+            kwargs["promote_single"] = bool(self.sep.get("promote_single", False))
+        return kwargs
 
     def build(self) -> nn.Module:
         s = self.sep

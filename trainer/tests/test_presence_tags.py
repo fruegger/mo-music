@@ -198,3 +198,15 @@ def test_promotion_is_off_by_default_and_the_flag_reaches_the_dataset(tmp_path):
     on = PresenceTask({"presence": {**CFG["presence"], "tags": str(csv), "promote_single": True}}).dataset_kwargs
     off = PresenceTask({"presence": {**CFG["presence"], "tags": str(csv)}}).dataset_kwargs
     assert on["promote_single"] is True and off["promote_single"] is False and on["source_tags"]["Song A"][3] == PRESENT
+
+
+def test_the_separation_task_passes_the_tags_and_promotion_to_the_dataset(tmp_path):
+    from trainer.train import SeparationTask
+    csv = tmp_path / "t.csv"
+    csv.write_text("split,song,instruments,dominant,unsure,notes\ntrain,A,guitar,,,\n", encoding="utf-8")
+    cfg = {"separation": {"source_set": "musdb6"}}
+    assert set(SeparationTask(cfg).dataset_kwargs) == {"source_set"}  # no tags: as before
+    on = SeparationTask({"separation": {**cfg["separation"], "tags": str(csv), "promote_single": True}}).dataset_kwargs
+    assert on["promote_single"] is True and on["source_tags"]["A"][3] == 1.0
+    off = SeparationTask({"separation": {**cfg["separation"], "tags": str(csv)}}).dataset_kwargs
+    assert off["promote_single"] is False
