@@ -65,6 +65,10 @@ class InstrumentTask:
 class PresenceTask:
     """Which sources are audible in a mix: multi-label, one output per source of the set (`musdb4`).
     A source counts as present when its target is above `active_db` (-50 dB RMS, the evaluator's definition).
+    With `present_rel_db` (say -40) the label is relative to the mix instead: present if the source is at most that
+    many dB below the mix, absent if it is more than `absent_rel_db` (-60) below it, and the zone in between is
+    ignored (weight 0): a source 45 dB under the mix is neither clearly there nor clearly not, and an inaudible
+    one costs nothing to drop. `pool` ("mean" / "maxmean") is the model's pooling over time.
     Trains on the separation items (mix and sources), so remixing and the other dataset wrappers apply; the
     model listens to the mono mix. Used to tell the separator which masks to keep (`Separator(..., presence=)`)."""
 
@@ -73,22 +77,34 @@ class PresenceTask:
 
     def __init__(self, cfg: dict):
         self.cfg = cfg
-        self.pres = {"source_set": "musdb4", "active_db": -50.0, "n_mels": 96, **cfg.get("presence", {})}
+        self.pres = {"source_set": "musdb4", "active_db": -50.0, "n_mels": 96, "present_rel_db": None,
+                     "absent_rel_db": -60.0, "pool": "mean", **cfg.get("presence", {})}
         self.dataset_kwargs = {"source_set": self.pres["source_set"]}
         self.names = source_names(self.pres["source_set"])
         self.bce = nn.BCEWithLogitsLoss()
 
     def build(self) -> nn.Module:
-        return InstrumentCnn(n_mels=self.pres["n_mels"], n_classes=len(self.names))
+        return InstrumentCnn(n_mels=self.pres["n_mels"], n_classes=len(self.names), pool=self.pres["pool"])
+
+    def targets(self, batch) -> tuple[torch.Tensor, torch.Tensor]:
+        """`(labels, weights)`, both `(batch, sources)`: 1.0 where the source is audible, and 0.0 weight where the
+        label is left out (the zone between present and absent of the relative definition)."""
+        level = 10.0 * torch.log10((batch["sources"] ** 2).mean(dim=(-1, -2)) + 1e-12)
+        if self.pres["present_rel_db"] is None:
+            return (level > self.pres["active_db"]).float(), torch.ones_like(level)
+        relative = level - 10.0 * torch.log10((batch["mix"] ** 2).mean(dim=(-1, -2)) + 1e-12).unsqueeze(1)
+        present = (relative >= self.pres["present_rel_db"]) & (level > -80.0)  # a silent mix has no present source
+        absent = ~present & ((relative < self.pres["absent_rel_db"]) | (level <= -80.0))
+        return present.float(), (present | absent).float()
 
     def labels(self, batch) -> torch.Tensor:
         """`(batch, sources)` 1.0 where the source is audible."""
-        level = 10.0 * torch.log10((batch["sources"] ** 2).mean(dim=(-1, -2)) + 1e-12)
-        return (level > self.pres["active_db"]).float()
+        return self.targets(batch)[0]
 
     def loss(self, model, batch, device):
-        mono = batch["mix"].mean(dim=1).to(device)
-        return self.bce(model(mono), self.labels(batch).to(device))
+        labels, weights = self.targets(batch)
+        per = nn.functional.binary_cross_entropy_with_logits(model(batch["mix"].mean(dim=1).to(device)), labels.to(device), reduction="none")
+        return (per * weights.to(device)).sum() / weights.sum().clamp(min=1.0).to(device)
 
     def evaluate(self, model, loader, device) -> dict:
         """Per-source precision, recall and F1 at probability 0.5, and the share of snippets where the source is present."""
@@ -97,14 +113,14 @@ class PresenceTask:
         with torch.no_grad():
             for batch in loader:
                 pred = (model(batch["mix"].mean(dim=1).to(device)).sigmoid() > 0.5).float().cpu()
-                target = self.labels(batch)
-                tp, fp = tp + (pred * target).sum(0), fp + (pred * (1 - target)).sum(0)
-                fn, present, n = fn + ((1 - pred) * target).sum(0), present + target.sum(0), n + len(target)
+                target, weight = self.targets(batch)
+                tp, fp = tp + (pred * target * weight).sum(0), fp + (pred * (1 - target) * weight).sum(0)
+                fn, present, n = fn + ((1 - pred) * target * weight).sum(0), present + (target * weight).sum(0), n + weight.sum(0)
         precision, recall = tp / (tp + fp).clamp(min=1.0), tp / (tp + fn).clamp(min=1.0)
         f1 = 2 * precision * recall / (precision + recall).clamp(min=1e-9)
         per = lambda v: dict(zip(self.names, [round(float(x), 4) for x in v]))
         return {"precision": per(precision), "recall": per(recall), "f1": per(f1),
-                "present_share": per(present / max(n, 1)), "mean_f1": float(f1.mean())}
+                "present_share": per(present / n.clamp(min=1.0) if torch.is_tensor(n) else present / max(n, 1)), "mean_f1": float(f1.mean())}
 
     def export(self, model, path: Path, mix: MixConfig, sample_rate: int = 44100) -> None:
         """Mono audio in, one logit per source out; `<path>.json` lists the sources."""

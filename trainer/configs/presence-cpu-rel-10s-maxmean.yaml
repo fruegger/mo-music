@@ -1,0 +1,47 @@
+# Recogniser v2 experiments, compared on scripts/recogniser_benchmark.py (60 s excerpts of the MUSDB18 test songs;
+# baseline presence-cpu-musdb: AUC 0.947, found 32 % of the absent sources at 2 % of the present ones removed, 73 % at 5 %).
+# Changes 1 + 2 + 3: relative labels, 10 s clips and a head that sees the average AND the maximum over time.
+task: presence
+sources: ../repo/prototype/sources.log
+out_dir: runs/presence-rel-10s-maxmean-seed0
+
+datasets:
+  - name: musdb18-prepared
+    train_split: train
+    val_split: test   # MUSDB18 has no validation split
+    weight: 1.0
+    remix: {p: 0.5}
+
+presence:
+  source_set: musdb4
+  active_db: -50.0
+  n_mels: 96
+  present_rel_db: -40.0   # present: at most 40 dB under the mix
+  absent_rel_db: -60.0    # absent: more than 60 dB under it; the zone in between is left out of the loss
+  pool: maxmean   # average and maximum over time
+
+mix:
+  seconds: 10.0
+  gain_db_range: [-12.0, 6.0]
+  p_stem_dropped: 0.3   # many absent sources, in training and in validation
+  effects: true
+  p_tempo: 0.0
+  p_pitch: 0.0
+
+val_mix:
+  effects: false   # score on clean mixes
+
+train:
+  epochs: 12   # the first recogniser plateaued after about 5 epochs
+  steps_per_epoch: 150
+  batch_size: 8
+  lr: 0.001
+  warmup_steps: 150
+  lr_final_fraction: 0.05
+  grad_clip: 1.0
+  num_workers: 3   # the laptop has 15.8 GB RAM and the watchdog stops big jobs
+  prefetch_factor: 1
+  val_snippets: 200
+  ema_decay: 0.999
+  val_seed_base: 1000000
+  seed: 0
