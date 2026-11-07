@@ -1,0 +1,52 @@
+# Long run of the six-source recipe (5,000 steps instead of 1,200; warm-up, cosine decay, grad clip and EMA as in the pod
+# lessons, since a longer run needs them). Is more training the limit? Compare with runs/local-musdb6-seed0 (+3.30 MUSDB18 mean).
+# Six sources: drums, bass, vocals, guitar, keys (piano, organ, strings, synths), other. Trained on MUSDB18 (where
+# guitar + keys + other are only known as a sum: the loss supervises the sum) plus the user's studio songs (all
+# six known). Studio train: Down Lizard Lane (synth), In My Belief, Summer Smiled (strings); studio test: Shimmering
+# Star (piano), Just Me Alone (organ): keys are tested on timbres not seen in training. Same recipe as soft-aug (tempo/pitch augmentation, softmax masks, clean validation).
+# Validation is per dataset: MUSDB18 reports drums, bass, vocals and the group; studio reports all six sources.
+# Needs mixer prepare-studio (C:/workarea/studio_prepared). MUSDB18 makes it non-commercial.
+task: separation
+sources: configs/studio-sources.log
+out_dir: runs/local-musdb6-long-seed0
+
+datasets:
+  - {name: musdb18-prepared, train_split: train, val_split: test, weight: 1.0}   # MUSDB18 has no validation split
+  - {name: studio, train_split: train, val_split: test, weight: 0.25}   # about a fifth of the training items
+
+separation:
+  mask: softmax
+  source_set: musdb6
+  n_fft: 2048
+  hop: 1024
+  base_channels: 12
+  depth: 3
+  source_weights: {vocals: 4.0}
+
+mix:
+  seconds: 3.0
+  gain_db_range: [-12.0, 6.0]
+  p_stem_dropped: 0.05   # vocals are rarely left out
+  effects: true
+  p_tempo: 0.5
+  p_pitch: 0.5
+
+val_mix:
+  effects: false   # train with effects, tempo and pitch changes; score on clean mixes (what real recordings are)
+  p_tempo: 0.0
+  p_pitch: 0.0
+
+train:
+  epochs: 20
+  steps_per_epoch: 250
+  batch_size: 8
+  lr: 0.002
+  warmup_steps: 250
+  lr_final_fraction: 0.05
+  grad_clip: 1.0
+  ema_decay: 0.999
+  num_workers: 3   # the laptop has 15.8 GB RAM and the watchdog stops big jobs (tempo/pitch make the loader slow)
+  prefetch_factor: 1
+  val_snippets: 48
+  val_seed_base: 1000000
+  seed: 0
