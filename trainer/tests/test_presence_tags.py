@@ -149,3 +149,52 @@ def test_a_recogniser_run_loads_without_its_tag_file():
     assert task.build().pool == "mean" and task.names[3] == "guitar"  # inference never reads the tags
     with pytest.raises(FileNotFoundError):
         task.dataset_kwargs
+
+
+def test_a_song_with_one_source_only_is_promoted_to_exact_targets():
+    from trainer.tags import single_source
+
+    assert single_source([-1, -1, -1, PRESENT, ABSENT, ABSENT]) == 3
+    assert single_source([-1, -1, -1, ABSENT, PRESENT, ABSENT]) == 4
+    assert single_source([-1, -1, -1, PRESENT, PRESENT, ABSENT]) is None  # two sources
+    assert single_source([-1, -1, -1, PRESENT, MAYBE, ABSENT]) is None  # a maybe: we do not know
+    assert single_source([-1, -1, -1, ABSENT, ABSENT, ABSENT]) is None
+    assert single_source([-1] * 6) is None  # no tags
+
+
+def test_promotion_moves_the_unlabelled_stem_to_its_source_and_makes_every_target_known():
+    config = MixConfig(seconds=1.0, p_stem_dropped=0.0, effects=False)
+
+    def render(state, promote=True, name="Song A"):
+        track = synthetic_track(name=name, with_unknown=True)
+        track.dataset = "musdb18"
+        ds = SnippetDataset([track], config, 1, tasks=("separation",), source_set="musdb6",
+                            source_tags={"Song A": state}, promote_single=promote)
+        return ds[0]
+
+    plain = render([-1, -1, -1, ABSENT, PRESENT, ABSENT], promote=False)
+    keys = render([-1, -1, -1, ABSENT, PRESENT, ABSENT])
+    assert plain["group_mask"].tolist() == [0, 0, 0, 1, 1, 1]
+    assert keys["sources_mask"].tolist() == [1.0] * 6 and keys["group_mask"].tolist() == [0.0] * 6
+    assert torch.allclose(keys["sources"][4], plain["sources"][4] + plain["sources"][5]) and keys["sources"][5].abs().max() == 0
+    assert torch.allclose(keys["mix"], plain["mix"])  # only the labelling changes, not the audio
+    other = render([-1, -1, -1, ABSENT, ABSENT, PRESENT])  # an other-only stem stays where it is
+    assert other["sources_mask"].tolist() == [1.0] * 6 and torch.allclose(other["sources"][5], plain["sources"][5])
+    mixed = render([-1, -1, -1, PRESENT, PRESENT, ABSENT])
+    assert mixed["group_mask"].tolist() == [0, 0, 0, 1, 1, 1]  # two sources: still only the sum is known
+    assert render([-1, -1, -1, ABSENT, PRESENT, ABSENT], name="Song B")["group_mask"].tolist() == [0, 0, 0, 1, 1, 1]  # not tagged
+
+
+def test_a_promoted_item_gets_exact_individual_labels_from_the_levels():
+    task = PresenceTask({"presence": {**CFG["presence"], "promote_single": True}})
+    known = item(None, individual_db=(-10.0, -10.0, -10.0, -120.0, -10.0, -120.0), tags=[-1, -1, -1, ABSENT, PRESENT, ABSENT])
+    labels, weights = task.targets(known)
+    assert labels[0, 3:].tolist() == [0.0, 1.0, 0.0] and weights[0, 3:].tolist() == [1.0, 1.0, 1.0]  # no tag_weight discount
+    assert task.group_weights(known).tolist() == [0.0]
+
+
+def test_promotion_is_off_by_default_and_the_flag_reaches_the_dataset(tmp_path):
+    csv = write_csv(tmp_path / "tags.csv", ["train,Song A,guitar,,,"])
+    on = PresenceTask({"presence": {**CFG["presence"], "tags": str(csv), "promote_single": True}}).dataset_kwargs
+    off = PresenceTask({"presence": {**CFG["presence"], "tags": str(csv)}}).dataset_kwargs
+    assert on["promote_single"] is True and off["promote_single"] is False and on["source_tags"]["Song A"][3] == PRESENT

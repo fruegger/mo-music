@@ -29,6 +29,15 @@ TAG_SOURCE = {
 }
 
 
+def single_source(state: list[float], source_set: str = "musdb6") -> int | None:
+    """The index of the one group source the song's `other` stem consists of: exactly one is `PRESENT` and the others
+    are `ABSENT` (a `MAYBE` anywhere means we do not know). `None` otherwise, also for a song with no tags. A stem with a
+    single source is that source, so its target is known exactly instead of only as part of a sum."""
+    group = GROUPS[source_set]
+    present = [i for i in group if state[i] == PRESENT]
+    return present[0] if len(present) == 1 and all(state[i] in (PRESENT, ABSENT) for i in group) else None
+
+
 def parse_tags(cell: str) -> list[str]:
     return [t.strip().lower() for t in cell.split("+") if t.strip()]
 

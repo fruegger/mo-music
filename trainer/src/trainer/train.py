@@ -84,7 +84,9 @@ class PresenceTask:
     from the hand-made `source_tags` if the song has some (untagged instrument: absent; tagged: present, with
     weight `tag_weight` because the instrument may be silent in this snippet; only in `unsure`: left out), and
     otherwise from one "at least one of the three is present" term on the noisy-OR of their probabilities.
-    Config: `presence.tags` (the CSV of `trainer.tags`) and `presence.tag_weight` (0.5)."""
+    Config: `presence.tags` (the CSV of `trainer.tags`) and `presence.tag_weight` (0.5). With `presence.promote_single`
+    a song whose tags name exactly one of the three (guitar only, keys only, ...) is not ambiguous at all: its
+    unlabelled stem is moved to that source and all six targets are known (the dataset does it, see `SnippetDataset`)."""
 
     name = "presence"
     dataset_task = "separation"  # the data it trains on
@@ -92,7 +94,8 @@ class PresenceTask:
     def __init__(self, cfg: dict):
         self.cfg = cfg
         self.pres = {"source_set": "musdb4", "active_db": -50.0, "n_mels": 96, "present_rel_db": None,
-                     "absent_rel_db": -60.0, "pool": "mean", "tags": None, "tag_weight": 0.5, **cfg.get("presence", {})}
+                     "absent_rel_db": -60.0, "pool": "mean", "tags": None, "tag_weight": 0.5,
+                     "promote_single": False, **cfg.get("presence", {})}
         self.names = source_names(self.pres["source_set"])
         self.group = GROUPS.get(self.pres["source_set"])
         self.bce = nn.BCEWithLogitsLoss()
@@ -104,6 +107,7 @@ class PresenceTask:
         kwargs = {"source_set": self.pres["source_set"]}
         if self.pres["tags"]:
             kwargs["source_tags"] = load_other_tags(Path(self.pres["tags"]), self.pres["source_set"])
+            kwargs["promote_single"] = bool(self.pres["promote_single"])
         return kwargs
 
     def build(self) -> nn.Module:

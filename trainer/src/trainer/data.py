@@ -7,6 +7,7 @@ from mixer.vocab import EXACT_IN_MUSDB
 from torch.utils.data import Dataset
 
 from .sources import GROUPS, group_sources, source_names
+from .tags import single_source
 
 CLASS_INDEX = {c: i for i, c in enumerate(CLASSES)}
 
@@ -58,9 +59,11 @@ class SnippetDataset(Dataset):
     """
 
     def __init__(self, tracks, config: MixConfig, length: int, seed_base: int = 0,
-                 tasks=("instruments",), source_set: str = "musdb4", source=None, source_tags: dict | None = None):
+                 tasks=("instruments",), source_set: str = "musdb4", source=None, source_tags: dict | None = None,
+                 promote_single: bool = False):
         self._tracks = None if tracks is None else list(tracks)
         self.source_tags = source_tags  # {MUSDB18 song: per-source state}, see `trainer.tags`
+        self.promote_single = promote_single  # a tagged `other` stem of one source becomes that source, all targets known
         self.source = source
         self.config = config
         self.length = length
@@ -111,17 +114,26 @@ class SnippetDataset(Dataset):
             item["instruments_mask"] = torch.from_numpy(loss_mask(labels))
         if "separation" in self.tasks:
             sources, mask = group_sources(as_stereo(snippet.stems), labels, self.source_set)
+            idx = GROUPS.get(self.source_set)
+            state = None  # the hand-made tags of this song (see `trainer.tags`), if there are any
+            if idx is not None and self.source_tags is not None and labels["dataset"] == "musdb18":
+                state = self.source_tags.get(labels["track"])
+            if self.promote_single and state is not None and mask[idx].min() == 0.0:
+                only = single_source(state, self.source_set)
+                if only is not None:  # the unlabelled stem is one source: move it there, every target is known
+                    if only != idx[-1]:  # the group's last source (`other`) carries the unlabelled mixture
+                        sources[only] += sources[idx[-1]]
+                        sources[idx[-1]] = 0.0
+                    mask[idx] = 1.0
             item["mix"] = torch.from_numpy(np.ascontiguousarray(as_stereo(snippet.mix).T))
             item["sources"] = torch.from_numpy(np.ascontiguousarray(sources.transpose(0, 2, 1)))
             item["sources_mask"] = torch.from_numpy(mask)
-            if self.source_set in GROUPS:
-                idx = GROUPS[self.source_set]
+            if idx is not None:
                 group_mask = np.zeros(len(mask), dtype=np.float32)
                 group_mask[idx] = float(mask[idx].min() == 0.0)
                 item["group_target"] = torch.from_numpy(np.ascontiguousarray(sources[idx].sum(axis=0).T))
                 item["group_mask"] = torch.from_numpy(group_mask)
-                if self.source_tags is not None:  # -1 everywhere for a song that has no tags (see `trainer.tags`)
-                    state = self.source_tags.get(labels["track"]) if labels["dataset"] == "musdb18" else None
+                if self.source_tags is not None:  # -1 everywhere for a song that has no tags
                     item["source_tags"] = torch.tensor(state if state is not None else [-1.0] * len(mask), dtype=torch.float32)
         return item
 
