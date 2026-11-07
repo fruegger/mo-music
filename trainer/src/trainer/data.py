@@ -53,12 +53,14 @@ class SnippetDataset(Dataset):
     * `separation`: `mix` `(2, T)`, `sources` `(n_sources, 2, T)`, `sources_mask`
       `(n_sources,)`; the sources of `source_set` (see `trainer.sources`). For a set with a group (`musdb6`)
       also `group_target` `(2, T)`, the sum of the grouped sources, and `group_mask` `(n_sources,)`, 1 on the
-      grouped sources when only their sum is known (else all 0)
+      grouped sources when only their sum is known (else all 0). With `source_tags` also `source_tags`
+      `(n_sources,)`: the hand-made state of the grouped sources for this song (-1 = no tags)
     """
 
     def __init__(self, tracks, config: MixConfig, length: int, seed_base: int = 0,
-                 tasks=("instruments",), source_set: str = "musdb4", source=None):
+                 tasks=("instruments",), source_set: str = "musdb4", source=None, source_tags: dict | None = None):
         self._tracks = None if tracks is None else list(tracks)
+        self.source_tags = source_tags  # {MUSDB18 song: per-source state}, see `trainer.tags`
         self.source = source
         self.config = config
         self.length = length
@@ -118,6 +120,9 @@ class SnippetDataset(Dataset):
                 group_mask[idx] = float(mask[idx].min() == 0.0)
                 item["group_target"] = torch.from_numpy(np.ascontiguousarray(sources[idx].sum(axis=0).T))
                 item["group_mask"] = torch.from_numpy(group_mask)
+                if self.source_tags is not None:  # -1 everywhere for a song that has no tags (see `trainer.tags`)
+                    state = self.source_tags.get(labels["track"]) if labels["dataset"] == "musdb18" else None
+                    item["source_tags"] = torch.tensor(state if state is not None else [-1.0] * len(mask), dtype=torch.float32)
         return item
 
 

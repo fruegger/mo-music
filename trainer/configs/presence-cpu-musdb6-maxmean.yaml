@@ -1,0 +1,51 @@
+# Six-class recogniser (drums, bass, vocals, guitar, keys, other): the best recogniser v2 recipe (relative labels, 10 s clips,
+# max+mean pooling; see recogniser-v2-results) on the musdb6 source set.
+# MUSDB18 only knows the SUM of guitar, keys and other. The hand-made tags (labels/musdb18-other-tags.csv) say which of them
+# are in each song: an untagged one is absent, a tagged one present with weight `tag_weight` (the instrument may be silent
+# in a given snippet), one only in `unsure` is left out. Songs without tags get an "at least one is present" term instead.
+# The studio songs know all six sources exactly (3 train songs, 2 held-out: piano and organ); weight 0.5 because they are
+# the only individual guitar/keys positives besides the tags. No remix (it needs the musdb4 set).
+# Needs mixer prepare-studio (C:/workarea/studio_prepared).
+task: presence
+sources: configs/studio-sources.log
+out_dir: runs/presence-musdb6-maxmean-seed0
+
+datasets:
+  - {name: musdb18-prepared, train_split: train, val_split: test, weight: 1.0}   # MUSDB18 has no validation split
+  - {name: studio, train_split: train, val_split: test, weight: 0.5}
+
+presence:
+  source_set: musdb6
+  active_db: -50.0
+  n_mels: 96
+  present_rel_db: -40.0   # present: at most 40 dB under the mix
+  absent_rel_db: -60.0    # absent: more than 60 dB under it; the zone in between is left out of the loss
+  pool: maxmean
+  tags: ../labels/musdb18-other-tags.csv   # relative to the trainer folder
+  tag_weight: 0.5
+
+mix:
+  seconds: 10.0
+  gain_db_range: [-12.0, 6.0]
+  p_stem_dropped: 0.3   # many absent sources, in training and in validation
+  effects: true
+  p_tempo: 0.0
+  p_pitch: 0.0
+
+val_mix:
+  effects: false   # score on clean mixes
+
+train:
+  epochs: 12
+  steps_per_epoch: 150
+  batch_size: 8
+  lr: 0.001
+  warmup_steps: 150
+  lr_final_fraction: 0.05
+  grad_clip: 1.0
+  num_workers: 3   # the laptop has 15.8 GB RAM and the watchdog stops big jobs
+  prefetch_factor: 1
+  val_snippets: 200
+  ema_decay: 0.999
+  val_seed_base: 1000000
+  seed: 0
