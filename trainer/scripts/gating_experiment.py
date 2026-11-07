@@ -18,6 +18,12 @@ Reported per dropout setting (`--dropout` = chance that a source is left out of 
 is absent) and condition, averaged over the runs: the mean SI-SDR improvement over the sources that are present
 and were kept (the usual metric), how many present sources were wrongly removed (per 100 present), and the
 leakage into absent sources (their estimate's level relative to the mix, dB; lower is better).
+
+A six-source separator (musdb6: drums, bass, vocals, guitar, keys, other) is scored as four units, as MUSDB18 only
+knows the sum of guitar, keys and other: the estimates and targets of the group are added up into one `other` unit.
+The gate still acts on the six masks. A unit is present when its target is above -50 dB, kept when at least one of its
+sources is let through. The oracle opens all three group sources when the group is audible (the truth is only known
+for the sum); `--recogniser` takes a six-source recogniser then.
 """
 
 import argparse
@@ -33,6 +39,7 @@ from trainer.data import SnippetDataset
 from trainer.recognise import load_recogniser
 from trainer.separate import load_model
 from trainer.separation import si_sdr
+from trainer.sources import GROUPS
 
 ACTIVE_DB = -50.0
 SELF_THRESHOLDS = (-20.0, -30.0, -40.0)  # dB relative to the mix
@@ -45,13 +52,42 @@ def level_db(x: torch.Tensor) -> torch.Tensor:
     return 10.0 * torch.log10((x**2).mean(dim=(-1, -2)) + 1e-12)
 
 
-def presences(first_pass: torch.Tensor, mix: torch.Tensor, truth: torch.Tensor, generator, recogniser=None) -> dict[str, torch.Tensor | None]:
+def fold(x: torch.Tensor, group: list[int] | None) -> torch.Tensor:
+    """`(batch, sources, ...)` -> `(batch, units, ...)`: the group sources added up into one unit (the last one)."""
+    if group is None:
+        return x
+    rest = [i for i in range(x.shape[1]) if i not in group]
+    return torch.cat([x[:, rest], x[:, group].sum(dim=1, keepdim=True)], dim=1)
+
+
+def unit_presence(presence: torch.Tensor, group: list[int] | None) -> torch.Tensor:
+    """`(batch, sources)` -> `(batch, units)`: a unit is open when any of its sources is."""
+    if group is None:
+        return presence
+    rest = [i for i in range(presence.shape[1]) if i not in group]
+    return torch.cat([presence[:, rest], presence[:, group].amax(dim=1, keepdim=True)], dim=1)
+
+
+def expand(units: torch.Tensor, n_sources: int, group: list[int] | None) -> torch.Tensor:
+    """`(batch, units)` -> `(batch, sources)`: every source of a unit gets the unit's value."""
+    if group is None:
+        return units
+    rest = [i for i in range(n_sources) if i not in group]
+    out = torch.zeros(units.shape[0], n_sources)
+    out[:, rest] = units[:, :-1]
+    out[:, group] = units[:, -1:]
+    return out
+
+
+def presences(first_pass: torch.Tensor, mix: torch.Tensor, truth: torch.Tensor, generator, recogniser=None,
+              group: list[int] | None = None) -> dict[str, torch.Tensor | None]:
     """The presence vectors `(batch, sources)` of every condition for one batch."""
-    oracle = (level_db(truth) > ACTIVE_DB).float()
+    oracle = (level_db(fold(truth, group)) > ACTIVE_DB).float()  # per unit
     flips = (torch.rand(oracle.shape, generator=generator) < FLIP).float()
     noisy = (oracle - flips).abs()
     noisy[noisy.sum(dim=1) == 0] = 1.0  # a recogniser always finds something
-    out = {"none": None, "oracle": oracle, "noisy": noisy}
+    n = first_pass.shape[1]
+    out = {"none": None, "oracle": expand(oracle, n, group), "noisy": expand(noisy, n, group)}
     rel = level_db(first_pass) - level_db(mix).unsqueeze(1)
     for thr in SELF_THRESHOLDS:
         present = (rel > thr).float()
@@ -66,18 +102,20 @@ def presences(first_pass: torch.Tensor, mix: torch.Tensor, truth: torch.Tensor, 
     return out
 
 
-def evaluate(model, batches, generator, recogniser=None) -> dict[str, dict[str, float]]:
+def evaluate(model, batches, generator, recogniser=None, group: list[int] | None = None) -> dict[str, dict[str, float]]:
     sums, kept, removed, present_total, leak_sum, leak_n = {}, {}, {}, {}, {}, {}
     n_sources = None
     for mix, sources in batches:
         spec, masks = model.analyse(mix)
-        n_sources = masks.shape[1]
         first = model.synthesize(spec, masks, mix.shape[-1])
-        active = level_db(sources) > ACTIVE_DB  # (batch, sources)
+        sources_full, sources = sources, fold(sources, group)
+        n_sources = sources.shape[1]
+        active = level_db(sources) > ACTIVE_DB  # (batch, units)
         baseline = si_sdr(mix.unsqueeze(1).expand_as(sources), sources)
-        for name, presence in presences(first, mix, sources, generator, recogniser).items():
+        for name, presence in presences(first, mix, sources_full, generator, recogniser, group).items():
             est = first if presence is None else model.synthesize(spec, _gate(model, masks, presence), mix.shape[-1])
-            kept_mask = active if presence is None else active & (presence > 0)
+            est = fold(est, group)
+            kept_mask = active if presence is None else active & (unit_presence(presence, group) > 0)
             gain = si_sdr(est, sources) - baseline  # (batch, sources)
             sums.setdefault(name, torch.zeros(n_sources)).add_((gain * kept_mask).sum(dim=0))
             kept.setdefault(name, torch.zeros(n_sources)).add_(kept_mask.sum(dim=0))
@@ -117,21 +155,27 @@ def main() -> None:
 
     registry = load_registry(str(args.sources))
     dataset = registry["musdb18-prepared"]
-    base_mix = json.loads((args.runs[0] / "run.json").read_text(encoding="utf-8"))["config"]["mix"]
+    config = json.loads((args.runs[0] / "run.json").read_text(encoding="utf-8"))["config"]
+    base_mix = config["mix"]
+    source_set = config.get("separation", {}).get("source_set", "musdb4")
+    group = GROUPS.get(source_set)
     models = [load_model(run)[0] for run in args.runs]
     recogniser = load_recogniser(args.recogniser)[0] if args.recogniser else None
     torch.manual_seed(0)
     report = {}
     for dropout in args.dropout:
         mix_cfg = MixConfig.from_dict({**base_mix, "effects": False, "p_tempo": 0.0, "p_pitch": 0.0, "p_stem_dropped": dropout})
-        data = SnippetDataset.from_dataset(dataset, "test", mix_cfg, args.snippets, 1_000_000, tasks=("separation",), source_set="musdb4")
+        data = SnippetDataset.from_dataset(dataset, "test", mix_cfg, args.snippets, 1_000_000, tasks=("separation",), source_set=source_set)
         with torch.no_grad():
             batches = [(b["mix"], b["sources"]) for b in DataLoader(data, 8)]
-            per_model = [evaluate(m, batches, torch.Generator().manual_seed(1), recogniser) for m in models]
+            per_model = [evaluate(m, batches, torch.Generator().manual_seed(1), recogniser, group) for m in models]
             if recogniser is not None:
                 print(f"\nrecogniser alone, dropout {dropout} (probability >= 0.5), per source: precision / recall / present share")
                 probs = torch.cat([recogniser(mix.mean(dim=1)).sigmoid() for mix, _ in batches])
-                truth = torch.cat([(level_db(src) > ACTIVE_DB).float() for _, src in batches])
+                if group is not None:  # the group as one unit: noisy-OR of its sources
+                    rest = [i for i in range(probs.shape[1]) if i not in group]
+                    probs = torch.cat([probs[:, rest], 1.0 - (1.0 - probs[:, group]).prod(dim=1, keepdim=True)], dim=1)
+                truth = torch.cat([(level_db(fold(src, group)) > ACTIVE_DB).float() for _, src in batches])
                 for k, name in enumerate(["drums", "bass", "vocals", "other"]):
                     pred = probs[:, k] >= 0.5
                     tp = float((pred & (truth[:, k] > 0)).sum())
