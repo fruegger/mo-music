@@ -1,0 +1,118 @@
+{
+ "0.05": [
+  {
+   "none": {
+    "improvement": 3.9771780967712402,
+    "removed_per_100": 0.0,
+    "leakage_db": -18.166723251342773,
+    "absent_cases": 150
+   },
+   "oracle": {
+    "improvement": 4.672846794128418,
+    "removed_per_100": 0.0,
+    "leakage_db": -91.94927215576172,
+    "absent_cases": 150
+   },
+   "noisy": {
+    "improvement": 4.351748466491699,
+    "removed_per_100": 7.538461685180664,
+    "leakage_db": -80.77698516845703,
+    "absent_cases": 150
+   },
+   "self-20": {
+    "improvement": 3.6570534706115723,
+    "removed_per_100": 3.692307710647583,
+    "leakage_db": -45.13014221191406,
+    "absent_cases": 150
+   },
+   "self-30": {
+    "improvement": 3.9848666191101074,
+    "removed_per_100": 0.3076923191547394,
+    "leakage_db": -22.83625602722168,
+    "absent_cases": 150
+   },
+   "self-40": {
+    "improvement": 3.976959705352783,
+    "removed_per_100": 0.0,
+    "leakage_db": -18.56926918029785,
+    "absent_cases": 150
+   },
+   "pred0.20": {
+    "improvement": 4.100187301635742,
+    "removed_per_100": 3.230769157409668,
+    "leakage_db": -56.749366760253906,
+    "absent_cases": 150
+   },
+   "pred0.35": {
+    "improvement": 4.385817050933838,
+    "removed_per_100": 8.615385055541992,
+    "leakage_db": -63.981346130371094,
+    "absent_cases": 150
+   },
+   "pred0.50": {
+    "improvement": 4.456765174865723,
+    "removed_per_100": 17.230770111083984,
+    "leakage_db": -74.54508209228516,
+    "absent_cases": 150
+   }
+  }
+ ],
+ "0.4": [
+  {
+   "none": {
+    "improvement": -6.231945991516113,
+    "removed_per_100": 0.0,
+    "leakage_db": -17.57530403137207,
+    "absent_cases": 379
+   },
+   "oracle": {
+    "improvement": 4.089415550231934,
+    "removed_per_100": 0.0,
+    "leakage_db": -90.68026733398438,
+    "absent_cases": 379
+   },
+   "noisy": {
+    "improvement": 0.4520927965641022,
+    "removed_per_100": 6.888360977172852,
+    "leakage_db": -79.26576232910156,
+    "absent_cases": 379
+   },
+   "self-20": {
+    "improvement": -6.411171913146973,
+    "removed_per_100": 2.850356340408325,
+    "leakage_db": -42.43486404418945,
+    "absent_cases": 379
+   },
+   "self-30": {
+    "improvement": -6.254128456115723,
+    "removed_per_100": 0.2375296950340271,
+    "leakage_db": -22.034353256225586,
+    "absent_cases": 379
+   },
+   "self-40": {
+    "improvement": -6.2313232421875,
+    "removed_per_100": 0.0,
+    "leakage_db": -18.263465881347656,
+    "absent_cases": 379
+   },
+   "pred0.20": {
+    "improvement": -0.49863409996032715,
+    "removed_per_100": 3.087886095046997,
+    "leakage_db": -62.02914810180664,
+    "absent_cases": 379
+   },
+   "pred0.35": {
+    "improvement": 1.7462127208709717,
+    "removed_per_100": 6.175772190093994,
+    "leakage_db": -72.1021957397461,
+    "absent_cases": 379
+   },
+   "pred0.50": {
+    "improvement": 1.4775501489639282,
+    "removed_per_100": 11.876484870910645,
+    "leakage_db": -76.58074951171875,
+    "absent_cases": 379
+   }
+  }
+ ]
+}

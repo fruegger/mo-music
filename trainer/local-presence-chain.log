@@ -1,0 +1,7 @@
+01:42 start presence-cpu-rel
+08:35 done presence-cpu-rel (exit 0)
+08:35 start presence-cpu-rel-10s
+09:46 done presence-cpu-rel-10s (exit 0)
+09:46 start presence-cpu-rel-10s-maxmean
+10:49 done presence-cpu-rel-10s-maxmean (exit 0)
+10:49 chain finished

@@ -1,0 +1,77 @@
+11:16:49
+=== presence-cpu-musdb-seed0
+
+recogniser alone, dropout 0.05 (probability >= 0.5), per source: precision / recall / present share
+  drums    0.97 /  0.90 /  0.81
+  bass     0.95 /  0.82 /  0.77
+  vocals   0.91 /  0.72 /  0.74
+  other    1.00 /  0.84 /  0.92
+
+source dropout 0.05: 200 snippets, 1 run(s), 150 absent-source cases
+condition   improvement dB  present removed /100  leakage into absent dB
+none           +3.98 (+/-0.00)                   0.0                   -18.2
+oracle         +4.67 (+/-0.00)                   0.0                   -91.9
+noisy          +4.35 (+/-0.00)                   7.5                   -80.8
+self-20        +3.66 (+/-0.00)                   3.7                   -45.1
+self-30        +3.98 (+/-0.00)                   0.3                   -22.8
+self-40        +3.98 (+/-0.00)                   0.0                   -18.6
+pred0.20       +4.10 (+/-0.00)                   3.2                   -56.7
+pred0.35       +4.39 (+/-0.00)                   8.6                   -64.0
+pred0.50       +4.46 (+/-0.00)                  17.2                   -74.5
+
+recogniser alone, dropout 0.4 (probability >= 0.5), per source: precision / recall / present share
+  drums    0.93 /  0.90 /  0.56
+  bass     0.91 /  0.87 /  0.52
+  vocals   0.90 /  0.81 /  0.49
+  other    0.94 /  0.84 /  0.54
+
+source dropout 0.4: 200 snippets, 1 run(s), 379 absent-source cases
+condition   improvement dB  present removed /100  leakage into absent dB
+none           -6.23 (+/-0.00)                   0.0                   -17.6
+oracle         +4.09 (+/-0.00)                   0.0                   -90.7
+noisy          +0.45 (+/-0.00)                   6.9                   -79.3
+self-20        -6.41 (+/-0.00)                   2.9                   -42.4
+self-30        -6.25 (+/-0.00)                   0.2                   -22.0
+self-40        -6.23 (+/-0.00)                   0.0                   -18.3
+pred0.20       -0.50 (+/-0.00)                   3.1                   -62.0
+pred0.35       +1.75 (+/-0.00)                   6.2                   -72.1
+pred0.50       +1.48 (+/-0.00)                  11.9                   -76.6
+exit 0 11:18:55
+=== presence-rel-10s-maxmean-seed0
+
+recogniser alone, dropout 0.05 (probability >= 0.5), per source: precision / recall / present share
+  drums    0.99 /  0.93 /  0.81
+  bass     0.95 /  0.83 /  0.77
+  vocals   0.95 /  0.74 /  0.74
+  other    0.99 /  0.85 /  0.92
+
+source dropout 0.05: 200 snippets, 1 run(s), 150 absent-source cases
+condition   improvement dB  present removed /100  leakage into absent dB
+none           +3.98 (+/-0.00)                   0.0                   -18.2
+oracle         +4.67 (+/-0.00)                   0.0                   -91.9
+noisy          +4.35 (+/-0.00)                   7.5                   -80.8
+self-20        +3.66 (+/-0.00)                   3.7                   -45.1
+self-30        +3.98 (+/-0.00)                   0.3                   -22.8
+self-40        +3.98 (+/-0.00)                   0.0                   -18.6
+pred0.20       +4.32 (+/-0.00)                   4.5                   -59.6
+pred0.35       +4.41 (+/-0.00)                   9.7                   -71.2
+pred0.50       +4.54 (+/-0.00)                  16.0                   -78.4
+
+recogniser alone, dropout 0.4 (probability >= 0.5), per source: precision / recall / present share
+  drums    0.92 /  0.95 /  0.56
+  bass     0.89 /  0.88 /  0.52
+  vocals   0.88 /  0.83 /  0.49
+  other    0.89 /  0.88 /  0.54
+
+source dropout 0.4: 200 snippets, 1 run(s), 379 absent-source cases
+condition   improvement dB  present removed /100  leakage into absent dB
+none           -6.23 (+/-0.00)                   0.0                   -17.6
+oracle         +4.09 (+/-0.00)                   0.0                   -90.7
+noisy          +0.45 (+/-0.00)                   6.9                   -79.3
+self-20        -6.41 (+/-0.00)                   2.9                   -42.4
+self-30        -6.25 (+/-0.00)                   0.2                   -22.0
+self-40        -6.23 (+/-0.00)                   0.0                   -18.3
+pred0.20       -0.12 (+/-0.00)                   3.8                   -63.6
+pred0.35       +1.46 (+/-0.00)                   7.6                   -73.8
+pred0.50       +2.34 (+/-0.00)                  10.9                   -77.3
+exit 0 11:21:16
