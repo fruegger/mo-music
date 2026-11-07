@@ -1,0 +1,32 @@
+  10/50 songs
+  20/50 songs
+  30/50 songs
+  40/50 songs
+  50/50 songs
+
+presence-rel-10s-maxmean-seed0 (truth: rel): 50 songs x 4 versions, 60 s excerpts, 647 present / 153 absent source-excerpts
+  statistic      AUC  drums   bass vocals  other | found@2% found@5%
+  share>=0.5   0.905  0.905  0.893  0.926    nan |       0%      69%
+  share>=0.2   0.761  0.760  0.790  0.728    nan |      22%      41%
+  mean         0.937  0.971  0.926  0.955    nan |      33%      66%
+  median       0.932  0.965  0.919  0.945    nan |      16%      52%
+  p90          0.947  0.995  0.923  0.971    nan |      25%      78%
+  max          0.949  0.996  0.923  0.972    nan |      27%      73%
+
+presence-musdb6-promote-seed0 (truth: rel): 50 songs x 4 versions, 60 s excerpts, 716 present / 179 absent source-excerpts
+  statistic      AUC  drums   bass vocals  other guitar   keys | found@2% found@5%
+  share>=0.5   0.860  0.894  0.863  0.856    nan  0.885  0.552 |       0%      54%
+  share>=0.2   0.734  0.745  0.768  0.674    nan  0.795  0.594 |      23%      39%
+  mean         0.897  0.956  0.907  0.906    nan  0.880  0.598 |      26%      54%
+  median       0.896  0.955  0.913  0.904    nan  0.865  0.606 |      17%      44%
+  p90          0.906  0.984  0.921  0.933    nan  0.877  0.598 |      23%      54%
+  max          0.902  0.987  0.917  0.928    nan  0.885  0.552 |      30%      56%
+
+presence-musdb6-maxmean-seed0 (truth: rel): 50 songs x 4 versions, 60 s excerpts, 716 present / 179 absent source-excerpts
+  statistic      AUC  drums   bass vocals  other guitar   keys | found@2% found@5%
+  share>=0.5   0.840  0.854  0.894  0.871    nan  0.905  0.511 |       0%      46%
+  share>=0.2   0.716  0.725  0.800  0.655    nan  0.821  0.571 |      20%      34%
+  mean         0.884  0.953  0.924  0.933    nan  0.887  0.548 |      24%      47%
+  median       0.881  0.958  0.917  0.927    nan  0.865  0.537 |      12%      39%
+  p90          0.897  0.988  0.932  0.956    nan  0.897  0.554 |      26%      44%
+  max          0.895  0.984  0.928  0.952    nan  0.889  0.498 |      23%      46%
