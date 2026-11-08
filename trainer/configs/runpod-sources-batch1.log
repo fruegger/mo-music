@@ -1,0 +1,4 @@
+name | load url | local path | date | license
+MUSDB18 | https://zenodo.org/records/1117372 | /workspace/MUSDB18 | 08.11.2026 | !! NON COMMERCIAL
+MUSDB18-prepared | derived from MUSDB18 with `mixer prepare-musdb` | /workspace/MUSDB18_prepared | 08.11.2026 | !! NON COMMERCIAL
+studio | own recordings, bounced stems of 5 songs, prepared with `mixer prepare-studio`, uploaded from the laptop | /workspace/studio_prepared | 08.11.2026 | Original material of the user (rights held)

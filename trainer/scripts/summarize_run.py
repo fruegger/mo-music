@@ -7,21 +7,27 @@ and the average of the last few epochs (a single epoch is noisy: judge a run by 
 import argparse
 import json
 
-SOURCES = ["drums", "bass", "vocals", "other"]
 
 
 def row(name: str, v: dict) -> str:
-    imp = v["si_sdr_improvement"]
-    return f"{name[:6]:>6} " + " ".join(f"{imp[s]:+6.1f}" for s in SOURCES) + f" | mean {v['mean_si_sdr_improvement']:+5.1f}"
+    imp, ex = v["si_sdr_improvement"], v.get("examples", {})
+    cells = " ".join("   n/a" if ex.get(s, 1) == 0 else f"{imp[s]:+6.1f}" for s in imp)  # n/a: no examples of that source
+    group = f" | group {v['group']['si_sdr_improvement']:+5.1f}" if v.get("group") else ""  # six-source models on MUSDB18
+    return f"{name[:6]:>6} " + cells + group + f" | mean {v['mean_si_sdr_improvement']:+5.1f}"
 
 
 def average(parts: list[dict]) -> dict:
     """The mean of several epochs' results for one dataset, in the shape `row` takes."""
     n = len(parts)
-    return {
-        "si_sdr_improvement": {s: sum(p["si_sdr_improvement"][s] for p in parts) / n for s in SOURCES},
+    names = list(parts[0]["si_sdr_improvement"])
+    out = {
+        "si_sdr_improvement": {s: sum(p["si_sdr_improvement"][s] for p in parts) / n for s in names},
+        "examples": {s: min(p.get("examples", {}).get(s, 1) for p in parts) for s in names},
         "mean_si_sdr_improvement": sum(p["mean_si_sdr_improvement"] for p in parts) / n,
     }
+    if all(p.get("group") for p in parts):
+        out["group"] = {"si_sdr_improvement": sum(p["group"]["si_sdr_improvement"] for p in parts) / n}
+    return out
 
 
 def main() -> None:
@@ -45,7 +51,8 @@ def main() -> None:
         for h, parts in zip(run["history"], per_epoch):
             print(f"ep {h['epoch']:>2} loss {h['train_loss']:.4f}  " + "   ".join(row(n, v) for n, v in parts.items()))
         print(f"avg of the last {len(tail)} epochs:   " + line)
-        print("columns: " + " ".join(f"{s:>6}" for s in SOURCES) + "  (SI-SDR improvement in dB)")
+        first = next(iter(avg.values()))["si_sdr_improvement"]
+        print("columns: " + " ".join(f"{s:>6}" for s in first) + "  (SI-SDR improvement in dB; n/a = no examples)")
 
 
 if __name__ == "__main__":
