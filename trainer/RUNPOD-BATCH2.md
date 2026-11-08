@@ -35,3 +35,19 @@ Compare C with D, seed by seed and as a mean of the two seeds. Seed noise is abo
 - **Labels hurt** (keys more than 1 dB lower, or another source more than 0.5 dB lower): drop them; investigate `p_solo` only if a hint
   shows where the harm comes from.
 - **Sanity:** D's MUSDB18 numbers should match batch 1's arm B within about 0.5-1 dB; if not, something else changed and the batch is read with care.
+
+
+## Results (2026-11-08; mean of the last 3 epochs, SI-SDR improvement in dB; drums/bass/vocals/guitar/keys)
+| run | MUSDB18 | studio (swapped split) |
+|---|---|---|
+| C labels, seed 0 | 5.6 / 5.8 / 5.3 / 6.6 / 4.2 | 8.0 / 3.0 / 10.4 / 3.3 / 4.2 |
+| C labels, seed 1 | 5.5 / 5.8 / 4.7 / 6.2 / 4.9 | 7.5 / 2.8 / 8.1 / 1.7 / 7.5 |
+| D control, seed 0 | 6.1 / 6.3 / 5.7 / 6.8 / 4.5 | 7.7 / 3.0 / 10.5 / 3.2 / 4.7 |
+| D control, seed 1 | 5.3 / 5.9 / 5.3 / 6.4 / 4.5 | 7.8 / 3.4 / 8.4 / 3.7 / 8.1 |
+
+**Outcome by the rules: no difference.** C minus D on keys: MUSDB18 -0.3 / +0.4 dB (seeds 0/1), studio -0.5 / -0.6 dB; the rule needed
++1 dB on both seeds. The other sources are 0.15-0.5 dB lower for C on MUSDB18 (vocals -0.5) and studio guitar about 1 dB lower (noise: same
+arm differs by 2 dB between seeds), so the labels also do not hurt keys. Sanity check passed: D's MUSDB18 numbers are within ~0.75 dB of
+batch 1's arm B. Caveats: studio keys is scored on one song (Just Me Alone; D alone gives 4.7 and 8.1), MUSDB18 keys on 10 items, and
+the labels are small (4 whole stems, 14 songs with solo windows). Consequence: do not label more for the separator; the piano class
+waits for more exact piano data (Slakh2100 at a small weight, needs the full 104 GB download, so a larger volume).
