@@ -5,14 +5,19 @@
 `scores.json` holds, per song, the AudioSet tagger's scores (5 s windows, hop 2.5 s) of instrument families over the whole
 `other` stem. The page `overview.html` (next to it) colours every window of the stem:
 
-  green  the instrument is heard and nothing else is (score >= `target` and every other family < `other`)
-  amber  the instrument is heard together with another family
-  red    another family is heard and the instrument is not
+  green  keys are heard and nothing else is (the `keys` family: piano, e-piano, organ, Hammond, keyboard, synthesizer)
+  amber  keys are heard together with another family (guitar, strings, vibraphone, brass, voice)
+  red    another family is heard and keys are not
   grey   nothing is recognised (silence, or something the tagger has no name for)
 
+"Keys are heard" is judged against the song itself: the keys score of a window must reach `max(floor, relative * the song's
+90th percentile)`, because the tagger is often unsure about real mixes (a stem that is almost all piano can score only 0.1).
+The card shows that 90th percentile as the tagger's confidence: when it is low, judge by ear. The tagger misses some sounds
+completely (Leslie e-piano heard as guitar, percussive Hammond heard as a synthesizer): there the bar stays grey or red.
+
 so a stem that is entirely piano is one green bar, and a stem with short vibraphone parts shows them as breaks, listed
-as interruptions with the family that caused them. Click a bar to play from there (audio: the `audio` folder of WAV copies, see segment_review.py). Judge each stem `all`, `mostly`, `partly`
-or `no`; judgements are kept in the browser and "Save CSV" downloads `stems.csv` with the judgement, the share of clean
+as interruptions with the family that caused them. Click a bar to play from there (audio: the `audio` folder of WAV copies, see segment_review.py). Judge each stem `all`, `mostly`
+(short other parts), `some` (a sizeable part), `brief` (a few short stretches, under about 10 %) or `no`; judgements are kept in the browser and "Save CSV" downloads `stems.csv` with the judgement, the share of clean
 windows and the interruptions. The thresholds can be changed on the page.
 """
 
@@ -45,16 +50,18 @@ input { cursor:text; width:64px; } button.on { background:var(--accent); color:#
 </style></head><body>
 <header>
   <strong>Stem overview</strong>
-  <label>instrument alone: score &ge; <input type="number" id="tt" step="0.05" value="0.3"></label>
-  <label>other family: score &ge; <input type="number" id="to" step="0.05" value="0.2"></label>
+  <label>keys: at least <input type="number" id="fl" step="0.01" value="0.05"></label>
+  <label>and &times; the song's top level <input type="number" id="rl" step="0.05" value="0.4"></label>
+  <label>other family &ge; <input type="number" id="to" step="0.05" value="0.2"></label>
   <button id="stop">Stop</button><button id="save" class="on">Save CSV</button><span id="count" class="meta"></span>
-  <span class="legend meta"><span class="c-clean"></span>only this<span class="c-mixed"></span>with others<span class="c-other"></span>others only<span class="c-quiet"></span>nothing named</span>
+  <span class="legend meta"><span class="c-clean"></span>only keys<span class="c-mixed"></span>keys with others<span class="c-other"></span>others only<span class="c-quiet"></span>nothing named</span>
 </header>
 <main id="list"></main>
 <audio id="audio" preload="auto"></audio>
 <script>
 const DATA = __DATA__, BASE = __BASE__, HOP = 2.5, WIN = 5.0, KEY = "segment-overview-v1";
 let saved = {}; try { saved = JSON.parse(localStorage.getItem(KEY) || "{}"); } catch (e) {}
+for (const k in saved) if (saved[k] === "partly") saved[k] = "some";   // the old four-way verdict
 const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(saved)); } catch (e) {} };
 const audio = document.getElementById("audio");
 const url = d => BASE + encodeURIComponent(d.split + " - " + d.song + ".wav");
@@ -82,12 +89,15 @@ function mark() {
 setInterval(mark, 120);
 // the window i covers [i*HOP, i*HOP+WIN]; its middle HOP seconds are what it is used for
 const span = i => [i * HOP + (WIN - HOP) / 2, i * HOP + (WIN + HOP) / 2];
-function analyse(d, inst, tt, to) {
-  const fams = Object.keys(d.scores), n = d.scores[inst].length, cells = [];
+const KEYBOARD = ["keys", "piano", "organ", "synth"];   // families that count as the instrument itself
+function analyse(d, inst, floor, rel, to) {
+  const keys = d.scores.keys || d.scores[inst], n = keys.length, cells = [];
+  const sorted = [...keys].sort((a, b) => a - b), p90 = sorted[Math.min(n - 1, Math.floor(0.9 * n))];
+  const thr = Math.max(floor, rel * p90), fams = Object.keys(d.scores).filter(f => !KEYBOARD.includes(f));
   for (let i = 0; i < n; i++) {
-    const s = d.scores[inst][i]; let best = "", bs = 0;
-    for (const f of fams) if (f !== inst && d.scores[f][i] > bs) { bs = d.scores[f][i]; best = f; }
-    const hasT = s >= tt, hasO = bs >= to;
+    const s = keys[i]; let best = "", bs = 0;
+    for (const f of fams) if (d.scores[f][i] > bs) { bs = d.scores[f][i]; best = f; }
+    const hasT = s >= thr, hasO = bs >= to;
     cells.push({ k: hasT ? (hasO ? "mixed" : "clean") : (hasO ? "other" : "quiet"), fam: hasO ? best : "" });
   }
   const gaps = []; let cur = null;
@@ -95,13 +105,13 @@ function analyse(d, inst, tt, to) {
     if (c.k !== "clean") { const [a, b] = span(i); if (cur && cur.fam === (c.fam || "?") && a - cur.end < 0.1) cur.end = b; else { cur = { start: a, end: b, fam: c.fam || "?" }; gaps.push(cur); } } else cur = null;
   });
   const share = k => cells.filter(c => c.k === k).length / n;
-  return { cells, gaps, clean: share("clean") };
+  return { cells, gaps, clean: share("clean"), p90, thr };
 }
 function render() {
-  const tt = +document.getElementById("tt").value, to = +document.getElementById("to").value;
+  const floor = +document.getElementById("fl").value, rel = +document.getElementById("rl").value, to = +document.getElementById("to").value;
   const list = document.getElementById("list"); list.innerHTML = ""; let done = 0, total = 0;
   const items = [];
-  for (const d of DATA) for (const inst of ["piano", "organ"]) if (d.tags.split("+").includes(inst)) items.push({ d, inst, a: analyse(d, inst, tt, to) });
+  for (const d of DATA) for (const inst of ["piano", "organ"]) if (d.tags.split("+").includes(inst)) items.push({ d, inst, a: analyse(d, inst, floor, rel, to) });
   items.sort((x, y) => y.a.clean - x.a.clean);
   for (const { d, inst, a } of items) {
     const id = d.split + "|" + d.song + "|" + inst, v = saved[id] || ""; total++; if (v) done++;
@@ -109,11 +119,11 @@ function render() {
     const pct = k => Math.round(100 * a.cells.filter(c => c.k === k).length / a.cells.length);
     const gaps = a.gaps.filter(g => g.end - g.start >= 0).slice(0, 12);
     card.innerHTML = `<h2>${d.song} &middot; <b>${inst}</b> <span class="meta">(${d.split}, ${Math.round(a.cells.length * HOP)} s, your tags: ${d.tags.replaceAll("+", ", ")})</span></h2>
-      <div class="meta">only ${inst}: <b>${pct("clean")}%</b> &middot; with others: ${pct("mixed")}% &middot; others only: ${pct("other")}% &middot; nothing named: ${pct("quiet")}%</div>
+      <div class="meta">only keys: <b>${pct("clean")}%</b> &middot; with others: ${pct("mixed")}% &middot; others only: ${pct("other")}% &middot; nothing named: ${pct("quiet")}% &middot; tagger confidence ${a.p90 < 0.1 ? "<b>low</b>" : a.p90 < 0.3 ? "medium" : "high"} (top level ${a.p90.toFixed(2)}, bar uses &ge; ${a.thr.toFixed(2)})</div>
       <div class="bar"><i class="head"></i>${a.cells.map((c, i) => `<span class="c-${c.k}" title="${span(i)[0].toFixed(0)} s ${c.fam}"></span>`).join("")}</div>
       <div class="gaps">${a.gaps.length ? a.gaps.length + " interruption(s): " : "no interruptions"}${gaps.map(g => `<a data-t="${g.start}">${g.start.toFixed(0)}-${g.end.toFixed(0)} s ${g.fam}</a>`).join("")}${a.gaps.length > 12 ? "&hellip;" : ""}</div>
-      <div class="row"><button class="stopbtn">&#9632; stop</button><span class="state"></span>${["all", "mostly", "partly", "no"].map(x => `<button data-v="${x}" class="${v === x ? "on" : ""}">${x}</button>`).join("")}
-      <span class="meta">all = the whole stem is ${inst} &middot; mostly = ${inst} with short other parts &middot; partly = only some stretches &middot; no</span></div>`;
+      <div class="row"><button class="stopbtn">&#9632; stop</button><span class="state"></span>${["all", "mostly", "some", "brief", "no"].map(x => `<button data-v="${x}" class="${v === x ? "on" : ""}">${x}</button>`).join("")}
+      <span class="meta">all = the whole stem is ${inst} &middot; mostly = ${inst} with short other parts &middot; some = a sizeable part &middot; brief = a few short stretches &middot; no</span></div>`;
     const dur = a.cells.length * HOP;
     card.querySelector(".bar").onclick = e => { const r = e.currentTarget.getBoundingClientRect(); playFrom(d, (e.clientX - r.left) / r.width * dur, id, dur); };
     card.querySelectorAll(".gaps a").forEach(el => el.onclick = () => playFrom(d, +el.dataset.t - 2, id, dur));
@@ -124,12 +134,12 @@ function render() {
   document.getElementById("count").textContent = done + " / " + total + " judged"; mark();
   window._items = items;
 }
-document.getElementById("tt").onchange = render; document.getElementById("to").onchange = render;
+for (const el of ["fl", "rl", "to"]) document.getElementById(el).onchange = render;
 document.getElementById("save").onclick = () => {
   const q = x => '"' + String(x).replaceAll('"', '""') + '"';
-  const rows = ["split,song,stem,instrument,verdict,clean_pct,interruptions"];
+  const rows = ["split,song,stem,instrument,verdict,keys_clean_pct,tagger_top_level,bar_threshold,interruptions"];
   for (const { d, inst, a } of window._items) { const v = saved[d.split + "|" + d.song + "|" + inst]; if (!v) continue;
-    rows.push([q(d.split), q(d.song), "other", inst, v, Math.round(100 * a.clean), q(a.gaps.map(g => g.start.toFixed(1) + "-" + g.end.toFixed(1) + ":" + g.fam).join(";"))].join(",")); }
+    rows.push([q(d.split), q(d.song), "other", inst, v, Math.round(100 * a.clean), a.p90.toFixed(2), a.thr.toFixed(2), q(a.gaps.map(g => g.start.toFixed(1) + "-" + g.end.toFixed(1) + ":" + g.fam).join(";"))].join(",")); }
   const el = document.createElement("a"); el.href = URL.createObjectURL(new Blob(["\ufeff" + rows.join("\n") + "\n"], { type: "text/csv" }));
   el.download = "stems.csv"; el.click();
 };
