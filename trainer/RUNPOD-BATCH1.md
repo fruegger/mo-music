@@ -15,8 +15,8 @@ batch also stays a clean baseline. Studio split as before (test = Shimmering Sta
 
 ## Cost (an estimate, check it with the benchmark first)
 Earlier pod runs without tempo/pitch took 0.47-0.56 s/step (data-bound). 4 x 10,000 steps = about 5.6 h at $0.69/h = about $4, plus
-~0.3 h of setup. Hard cap: `HOURS_PER_RUN` (default 2) per run = at most 8 h = $5.5, and the pod removes itself after the last run
-(`AUTO_TERMINATE=1`). If `scripts/bench_pipeline.py --config configs/runpod-b1-a-promote.yaml` on the pod says more than ~0.7 s/step,
+~0.3 h of setup. Hard cap: `HOURS_PER_RUN` (default 2) per run = at most 8 h = $5.5, and the pod stops itself after the last run
+(`AUTO_STOP=1`). If `scripts/bench_pipeline.py --config configs/runpod-b1-a-promote.yaml` on the pod says more than ~0.7 s/step,
 stop and rethink (fewer steps or one seed) before paying for hours.
 
 ## Before renting the pod (needs the user)
@@ -31,9 +31,14 @@ stop and rethink (fewer steps or one seed) before paying for hours.
 cd /workspace && git clone https://github.com/fruegger/mo-music.git && cd mo-music/trainer
 bash scripts/runpod_setup.sh data-musdb
 python scripts/bench_pipeline.py --config configs/runpod-b1-a-promote.yaml     # s/step: decide here
-HOURS_PER_RUN=2 AUTO_TERMINATE=1 GRACE_MIN=30 bash scripts/runpod_batch1.sh 2>&1 | tee /workspace/batch1.log
+HOURS_PER_RUN=2 AUTO_STOP=1 bash scripts/runpod_batch1.sh 2>&1 | tee /workspace/batch1.log
 ```
-Download `/workspace/runs/b1-*` (at least `run.json`, `model.pt`) within the grace period, then summarise:
+**Results are not lost if you cannot download right away.** The runs are written to `/workspace` (the volume disk) and bundled into
+`/workspace/batch1-results.tar.gz`. With `AUTO_STOP=1` the pod *stops* itself after the last run: compute billing ends, the volume
+is kept (a stopped pod's volume costs about $0.20 per GB and month, so roughly $6 a month for 30 GB, i.e. cents per day). To
+get the files later, start the pod again (CPU-only is enough if no GPU is free) and download the bundle through the web terminal or
+`runpodctl send`; then **remove the pod** so the storage fee ends. Do not use `AUTO_TERMINATE` unless the files are downloaded:
+it deletes the pod and its volume. Summarise with
 `python scripts/summarize_run.py runs/b1-*/run.json --last 3 --compact`.
 
 ## Decision rules (fixed before the run)

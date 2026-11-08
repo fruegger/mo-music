@@ -5,8 +5,12 @@
 # Order: seed 0 of both arms first, so that a pair exists even if the money runs out.
 #
 # On the pod, in /workspace/mo-music/trainer, after /workspace/studio_prepared has been uploaded:
-#   HOURS_PER_RUN=2 AUTO_TERMINATE=1 GRACE_MIN=30 bash scripts/runpod_batch1.sh 2>&1 | tee /workspace/batch1.log
-# Results: /workspace/runs/b1-<arm>-s<seed>/ (run.json, model.pt, model.onnx, checkpoint.pt). Download them before the pod goes.
+#   HOURS_PER_RUN=2 AUTO_STOP=1 bash scripts/runpod_batch1.sh 2>&1 | tee /workspace/batch1.log
+# Results: /workspace/runs/b1-<arm>-s<seed>/ (run.json, model.pt, model.onnx, checkpoint.pt) and the bundle
+# /workspace/batch1-results.tar.gz (run.json + model.pt of every run, a few MB). They live on the volume disk, which a STOPPED pod
+# keeps (about $0.20 per GB and month for the 30 GB volume), so with AUTO_STOP=1 nothing is lost if you cannot download right away:
+# the pod stops itself after the last run (no more compute billing) and you copy the files out whenever you like, even by
+# starting the pod CPU-only. AUTO_TERMINATE=1 instead REMOVES the pod (and the volume) after GRACE_MIN minutes: only with the files downloaded.
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
@@ -21,10 +25,15 @@ for seed in 0 1; do
     done
 done
 
-if [ "${AUTO_TERMINATE:-0}" = "1" ]; then
+tar -czf /workspace/batch1-results.tar.gz -C /workspace/runs --wildcards '*/run.json' '*/model.pt' '*/model.json' 2>/dev/null     && echo "bundle: $(ls -lh /workspace/batch1-results.tar.gz | awk '{print $5, $9}')"
+
+if [ "${AUTO_STOP:-0}" = "1" ]; then
+    echo "stopping this pod (the volume with the results is kept; restart it, CPU-only is enough, to copy the files out)"
+    runpodctl stop pod "$RUNPOD_POD_ID" || runpodctl pod stop "$RUNPOD_POD_ID"
+elif [ "${AUTO_TERMINATE:-0}" = "1" ]; then
     echo "removing this pod in ${GRACE_MIN:-30} minutes: download the results now"
     sleep $(( ${GRACE_MIN:-30} * 60 ))
     runpodctl remove pod "$RUNPOD_POD_ID"
 else
-    echo "AUTO_TERMINATE is off: terminate the pod yourself when the results are downloaded (it is billing)"
+    echo "AUTO_STOP and AUTO_TERMINATE are off: stop the pod yourself (it is billing)"
 fi
