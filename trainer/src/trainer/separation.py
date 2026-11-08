@@ -111,7 +111,8 @@ class Separator(nn.Module):
 
 def separation_loss(estimates: torch.Tensor, sources: torch.Tensor, mask: torch.Tensor,
                     group_target: torch.Tensor | None = None, group_mask: torch.Tensor | None = None,
-                    silent_weight: float = 1.0, silent_db: float = -60.0) -> torch.Tensor:
+                    silent_weight: float = 1.0, silent_db: float = -60.0,
+                    present_weights: torch.Tensor | None = None, present_db: float = -50.0) -> torch.Tensor:
     """L1 on the waveforms, averaged over the sources whose target is known.
     A silent source is a valid target (the model should output silence). A leak into a silent source is a small
     error in absolute terms and L1 barely feels it, so with `silent_weight` > 1 the error of every source whose
@@ -119,12 +120,19 @@ def separation_loss(estimates: torch.Tensor, sources: torch.Tensor, mask: torch.
     of known targets, so the other sources are weighted as before).
     With `group_target` `(batch, channels, samples)` and `group_mask` `(batch, sources)`, an item whose group mask is
     set is also supervised on the sum of the grouped estimates (its individual targets are masked out): the
-    sum counts as one more known target, so every supervised target weighs the same."""
+    sum counts as one more known target, so every supervised target weighs the same.
+    `present_weights` `(sources,)` multiplies the error of a source only where its target is audible (above `present_db`):
+    L1 is a median-like loss, so a source that is absent in most items is cheapest to switch off; a larger weight on its
+    audible items moves that balance (the divisor is unchanged, as for `silent_weight`)."""
     per_source = (estimates - sources).abs().mean(dim=(-1, -2))  # (batch, sources)
     weight = mask
+    level = 10.0 * torch.log10((sources**2).mean(dim=(-1, -2)) + 1e-12)  # (batch, sources)
     if silent_weight != 1.0:
-        silent = (10.0 * torch.log10((sources**2).mean(dim=(-1, -2)) + 1e-12) < silent_db).to(mask.dtype)  # (batch, sources)
-        weight = mask * (1.0 + (silent_weight - 1.0) * silent)
+        silent = (level < silent_db).to(mask.dtype)
+        weight = weight * (1.0 + (silent_weight - 1.0) * silent)
+    if present_weights is not None:
+        present = (level > present_db).to(mask.dtype)
+        weight = weight * (1.0 + (present_weights.to(mask) - 1.0) * present)
     total, count = (per_source * weight).sum(), mask.sum()
     if group_target is not None:
         grouped = (estimates * group_mask[:, :, None, None]).sum(dim=1)  # (batch, channels, samples)

@@ -274,6 +274,10 @@ class SeparationTask:
         if unknown:
             raise ValueError(f"source_weights names unknown sources {sorted(unknown)}; the set has {names}")
         self.source_weights = torch.tensor([float(weights.get(n, 1.0)) for n in names])
+        present = self.sep.get("present_weights", {})  # {name: weight} on the audible items of a source only
+        if set(present) - set(names):
+            raise ValueError(f"present_weights names unknown sources {sorted(set(present) - set(names))}; the set has {names}")
+        self.present_weights = torch.tensor([float(present.get(n, 1.0)) for n in names]) if present else None
 
     @property
     def dataset_kwargs(self) -> dict:
@@ -294,7 +298,8 @@ class SeparationTask:
         estimates = model(batch["mix"].to(device))
         mask = batch["sources_mask"].to(device) * self.source_weights.to(device)
         group = (batch["group_target"].to(device), batch["group_mask"].to(device)) if "group_mask" in batch else (None, None)
-        return separation_loss(estimates, batch["sources"].to(device), mask, *group, silent_weight=float(self.sep.get("silent_weight", 1.0)))
+        return separation_loss(estimates, batch["sources"].to(device), mask, *group, silent_weight=float(self.sep.get("silent_weight", 1.0)),
+                               present_weights=None if self.present_weights is None else self.present_weights.to(device))
 
     def evaluate(self, model, loader, device) -> dict:
         scores = evaluate_separation(model, loader, device)
