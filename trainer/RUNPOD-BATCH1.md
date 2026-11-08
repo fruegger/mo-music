@@ -49,3 +49,18 @@ it deletes the pod and its volume. Summarise with
   Clearly higher means 10,000 steps is worth it; equal means the limit is data.
 - **Seeds:** differences under about 0.5-1 dB between arms are noise.
 - Batch 2 (not before these answers): add the listening labels (`separation.stem_labels`, `separation.solo_windows`), then Slakh at a small weight.
+
+
+## Results (2026-11-08; mean of the last 3 epochs, SI-SDR improvement in dB; MUSDB18 drums/bass/vocals/guitar/keys, then studio)
+| run | MUSDB18 | studio |
+|---|---|---|
+| A seed 0 | 6.0 / 5.9 / 5.6 / 6.9 / **-7.9** | 7.4 / 4.5 / 8.4 / 5.4 / **-8.1** |
+| A seed 1 | 6.0 / 6.1 / 3.4 / 5.8 / **-4.7** | 6.9 / 4.6 / 7.9 / 5.7 / **-6.9** |
+| B seed 0 | 5.8 / 6.5 / 5.4 / 6.8 / **+3.7** | 7.2 / 5.2 / 9.5 / 5.8 / **+4.7** |
+| B seed 1 | 6.0 / 5.9 / 4.1 / 6.0 / **+3.8** | 6.7 / 4.7 / 5.8 / 5.3 / **+4.8** |
+
+All three keys rules are met: A collapses (studio keys below -6.9 dB), B keeps keys at about +4.7 dB (studio) and +3.7 dB (MUSDB18) on both
+seeds, and B is within 0.5 dB of A on drums/bass/vocals/guitar (largest gap studio vocals -0.5, well inside the seed spread). **B's setting
+(`present_weights: {keys: 4}`) is adopted.** 10,000 steps without tempo/pitch also beats the laptop long run (5,000 steps) on drums/bass/guitar
+(+6.0/+5.9-6.5/+6.0-6.9 vs +5.8/+5.2/+4.7); vocals is still rising at epoch 19 (not converged). Note for the bundle: `tar` does not expand
+wildcards when creating an archive, the first bundle command made an empty file (fixed with `find`).

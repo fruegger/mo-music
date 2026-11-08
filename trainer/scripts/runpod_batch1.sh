@@ -25,7 +25,10 @@ for seed in 0 1; do
     done
 done
 
-tar -czf /workspace/batch1-results.tar.gz -C /workspace/runs --wildcards '*/run.json' '*/model.pt' '*/model.json' 2>/dev/null     && echo "bundle: $(ls -lh /workspace/batch1-results.tar.gz | awk '{print $5, $9}')"
+# (tar does not expand wildcards when creating an archive: it made an empty bundle once. find lists the files instead.)
+(cd /workspace/runs && find b1-* -maxdepth 1 -type f \( -name run.json -o -name model.pt -o -name model.json \) -print0 \
+    | tar --null -T - -czf /workspace/batch1-results.tar.gz) \
+    && echo "bundle: $(tar -tzf /workspace/batch1-results.tar.gz | wc -l) files, $(ls -lh /workspace/batch1-results.tar.gz | awk '{print $5}')"
 
 if [ "${AUTO_STOP:-0}" = "1" ]; then
     echo "stopping this pod (the volume with the results is kept; restart it, CPU-only is enough, to copy the files out)"
