@@ -30,6 +30,10 @@ body { margin:0; font:15px/1.4 system-ui, sans-serif; background:var(--bg); colo
 header { position:sticky; top:0; background:var(--bg); border-bottom:1px solid var(--line); padding:10px 16px; z-index:2; display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
 main { padding:8px 16px 60px; max-width:960px; margin:0 auto; }
 .card { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:10px 12px; margin:12px 0; }
+.card.playing { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent); }
+.bar { position:relative; } .head { position:absolute; top:0; bottom:0; width:2px; background:var(--fg); left:0; display:none; pointer-events:none; }
+.card.playing .head { display:block; } .stopbtn { display:none; background:var(--other); border-color:var(--other); color:#fff; } .card.playing .stopbtn { display:inline-block; }
+.state { display:none; font-size:13px; color:var(--accent); } .card.playing .state { display:inline; }
 .card h2 { font-size:16px; margin:0 0 2px; } .meta { color:var(--muted); font-size:13px; }
 .bar { display:flex; height:30px; margin:8px 0 4px; border-radius:4px; overflow:hidden; cursor:pointer; border:1px solid var(--line); }
 .bar span { flex:1; min-width:1px; } .c-clean{background:var(--clean)} .c-mixed{background:var(--mixed)} .c-other{background:var(--other)} .c-quiet{background:var(--quiet)}
@@ -54,11 +58,28 @@ let saved = {}; try { saved = JSON.parse(localStorage.getItem(KEY) || "{}"); } c
 const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(saved)); } catch (e) {} };
 const audio = document.getElementById("audio");
 const url = d => BASE + encodeURIComponent(d.split + " - " + d.song + ".wav");
-function playFrom(d, t) {
+let current = null, started = false, clickedAt = 0;   // current: {card id, stem duration in s} of the card that was started
+function playFrom(d, t, cardId, dur) {
+  current = { id: cardId, dur }; started = false; clickedAt = Date.now(); mark();
   const go = () => { audio.currentTime = Math.max(0, t); audio.play(); }, u = url(d);
   if (audio.dataset.u !== u) { audio.dataset.u = u; audio.src = u; audio.addEventListener("loadedmetadata", go, { once: true }); audio.load(); } else go();
 }
-document.getElementById("stop").onclick = () => audio.pause();
+const halt = () => { audio.pause(); current = null; mark(); };
+document.getElementById("stop").onclick = halt;
+// feedback: the card that is playing gets a highlighted border, a playhead on its bar, a red stop button and a state text
+function mark() {
+  if (current && !audio.paused) started = true;
+  if (current && ((started && audio.paused) || (!started && Date.now() - clickedAt > 6000))) current = null;
+  document.querySelectorAll(".card").forEach(c => {
+    const on = !!current && c.dataset.id === current.id;
+    c.classList.toggle("playing", on);
+    if (!on) return;
+    c.querySelector(".head").style.left = Math.min(100, 100 * audio.currentTime / current.dur) + "%";
+    const t = Math.floor(audio.currentTime);
+    c.querySelector(".state").textContent = (started ? "playing " : "loading ") + Math.floor(t / 60) + ":" + String(t % 60).padStart(2, "0");
+  });
+}
+setInterval(mark, 120);
 // the window i covers [i*HOP, i*HOP+WIN]; its middle HOP seconds are what it is used for
 const span = i => [i * HOP + (WIN - HOP) / 2, i * HOP + (WIN + HOP) / 2];
 function analyse(d, inst, tt, to) {
@@ -84,21 +105,23 @@ function render() {
   items.sort((x, y) => y.a.clean - x.a.clean);
   for (const { d, inst, a } of items) {
     const id = d.split + "|" + d.song + "|" + inst, v = saved[id] || ""; total++; if (v) done++;
-    const card = document.createElement("div"); card.className = "card";
+    const card = document.createElement("div"); card.className = "card"; card.dataset.id = id;
     const pct = k => Math.round(100 * a.cells.filter(c => c.k === k).length / a.cells.length);
     const gaps = a.gaps.filter(g => g.end - g.start >= 0).slice(0, 12);
     card.innerHTML = `<h2>${d.song} &middot; <b>${inst}</b> <span class="meta">(${d.split}, ${Math.round(a.cells.length * HOP)} s, your tags: ${d.tags.replaceAll("+", ", ")})</span></h2>
       <div class="meta">only ${inst}: <b>${pct("clean")}%</b> &middot; with others: ${pct("mixed")}% &middot; others only: ${pct("other")}% &middot; nothing named: ${pct("quiet")}%</div>
-      <div class="bar">${a.cells.map((c, i) => `<span class="c-${c.k}" title="${span(i)[0].toFixed(0)} s ${c.fam}"></span>`).join("")}</div>
+      <div class="bar"><i class="head"></i>${a.cells.map((c, i) => `<span class="c-${c.k}" title="${span(i)[0].toFixed(0)} s ${c.fam}"></span>`).join("")}</div>
       <div class="gaps">${a.gaps.length ? a.gaps.length + " interruption(s): " : "no interruptions"}${gaps.map(g => `<a data-t="${g.start}">${g.start.toFixed(0)}-${g.end.toFixed(0)} s ${g.fam}</a>`).join("")}${a.gaps.length > 12 ? "&hellip;" : ""}</div>
-      <div class="row">${["all", "mostly", "partly", "no"].map(x => `<button data-v="${x}" class="${v === x ? "on" : ""}">${x}</button>`).join("")}
+      <div class="row"><button class="stopbtn">&#9632; stop</button><span class="state"></span>${["all", "mostly", "partly", "no"].map(x => `<button data-v="${x}" class="${v === x ? "on" : ""}">${x}</button>`).join("")}
       <span class="meta">all = the whole stem is ${inst} &middot; mostly = ${inst} with short other parts &middot; partly = only some stretches &middot; no</span></div>`;
-    card.querySelector(".bar").onclick = e => { const r = e.currentTarget.getBoundingClientRect(); playFrom(d, (e.clientX - r.left) / r.width * a.cells.length * HOP); };
-    card.querySelectorAll(".gaps a").forEach(el => el.onclick = () => playFrom(d, +el.dataset.t - 2));
+    const dur = a.cells.length * HOP;
+    card.querySelector(".bar").onclick = e => { const r = e.currentTarget.getBoundingClientRect(); playFrom(d, (e.clientX - r.left) / r.width * dur, id, dur); };
+    card.querySelectorAll(".gaps a").forEach(el => el.onclick = () => playFrom(d, +el.dataset.t - 2, id, dur));
+    card.querySelector(".stopbtn").onclick = halt;
     card.querySelectorAll(".row button").forEach(b => b.onclick = () => { saved[id] = b.dataset.v; persist(); render(); });
     list.appendChild(card);
   }
-  document.getElementById("count").textContent = done + " / " + total + " judged";
+  document.getElementById("count").textContent = done + " / " + total + " judged"; mark();
   window._items = items;
 }
 document.getElementById("tt").onchange = render; document.getElementById("to").onchange = render;
