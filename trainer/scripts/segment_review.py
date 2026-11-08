@@ -3,7 +3,7 @@
     python scripts/segment_review.py [--candidates C:/workarea/segment-candidates/candidates.csv]
 
 `candidates.csv` (columns split, song, instrument, rank, start_s, end_s, score, alone, ...) comes from the tagger run. The page
-`review.html` is written next to it and plays a mono 32 kHz WAV copy of each song's `other` stem from the `audio` folder next to it (made by the tagger run; a
+`review.html` is written next to it and plays a mono 32 kHz WAV copy of each song's `other` stem from the `audio` folder next to it (made by `scripts/tag_stems.py`; a
 WAV seeks reliably anywhere, which the FLAC files did not in long songs). Open it from disk: no server. Windows where the tagger
 heard nothing of the instrument (score < 0.05) are not shown. For each window: play it (also with 3 s of context), adjust start and end, and judge it
 `solo` (only this instrument), `mixed` (this instrument with others), `no` or `unsure`. Judgements are kept in the browser

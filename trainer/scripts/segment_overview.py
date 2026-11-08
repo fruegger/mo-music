@@ -16,7 +16,7 @@ The card shows that 90th percentile as the tagger's confidence: when it is low, 
 completely (Leslie e-piano heard as guitar, percussive Hammond heard as a synthesizer): there the bar stays grey or red.
 
 so a stem that is entirely piano is one green bar, and a stem with short vibraphone parts shows them as breaks, listed
-as interruptions with the family that caused them. Click a bar to play from there (audio: the `audio` folder of WAV copies, see segment_review.py). Judge each stem `all`, `mostly`
+as interruptions with the family that caused them. Click a bar to play from there (audio: the `audio` folder of WAV copies, made by tag_stems.py). Judge each stem `all`, `mostly`
 (short other parts), `some` (a sizeable part), `brief` (a few short stretches, under about 10 %) or `no`; judgements are kept in the browser and "Save CSV" downloads `stems.csv` with the judgement, the share of clean
 windows and the interruptions. The thresholds can be changed on the page.
 """
