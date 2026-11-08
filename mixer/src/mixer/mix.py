@@ -150,8 +150,11 @@ def onset_times(stem_info: list[dict]) -> dict:
     }
 
 
-def render_snippet(track: Track, seed: int, config: MixConfig = MixConfig()) -> Snippet:
-    """Deterministic in (track, seed, config)."""
+def render_snippet(track: Track, seed: int, config: MixConfig = MixConfig(),
+                   start_window: tuple[float, float] | None = None) -> Snippet:
+    """Deterministic in (track, seed, config, start_window). With `start_window` `(from, to)` in seconds the snippet's source
+    span is placed inside that window (it starts at `from` if the window is shorter than the span); the random draws are the
+    same as without it, so only the start changes."""
     name_hash = _stable_hash(track.name)
     rng = np.random.default_rng([seed, name_hash])
     tempo_ratio, pitch = sample_transform(np.random.default_rng([seed, name_hash, 1]), config)
@@ -163,6 +166,11 @@ def render_snippet(track: Track, seed: int, config: MixConfig = MixConfig()) -> 
     # One fixed-size draw whatever the bound, so a tempo change (longer or
     # shorter source crop) leaves every later random choice unchanged.
     start = int(rng.random() * max(1, track.n_frames - source_length))
+    if start_window is not None:
+        lo = int(start_window[0] * track.sample_rate)
+        room = int(start_window[1] * track.sample_rate) - source_length - lo
+        start = lo + (int(start / max(1, track.n_frames - source_length) * room) if room > 0 else 0)
+        start = min(max(0, start), max(0, track.n_frames - source_length))
 
     kept = [s for s in track.stems if rng.random() >= config.p_stem_dropped]
     if len(kept) < config.min_stems:

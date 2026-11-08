@@ -19,6 +19,7 @@ from torch.utils.data import ConcatDataset, DataLoader
 from .data import RemixDataset, SnippetDataset, VocalMixDataset
 from .model import InstrumentCnn
 from .separation import Separator, evaluate_separation, separation_loss
+from .segments import load_solo_windows, load_stem_labels
 from .sources import GROUPS, source_names
 from .tags import load_other_tags
 
@@ -288,6 +289,11 @@ class SeparationTask:
         if self.sep.get("tags"):
             kwargs["source_tags"] = load_other_tags(Path(self.sep["tags"]), self.sep["source_set"])
             kwargs["promote_single"] = bool(self.sep.get("promote_single", False))
+        if self.sep.get("stem_labels"):  # whole-stem judgements from the listening pages (`trainer.segments`)
+            kwargs["exact_stems"] = load_stem_labels(Path(self.sep["stem_labels"]), self.sep["source_set"])
+        if self.sep.get("solo_windows"):  # solo windows; `p_solo` of the snippets of such songs are placed inside one
+            kwargs["solo_windows"] = load_solo_windows(Path(self.sep["solo_windows"]), self.sep["source_set"])
+            kwargs["p_solo"] = float(self.sep.get("p_solo", 0.25))
         return kwargs
 
     def build(self) -> nn.Module:

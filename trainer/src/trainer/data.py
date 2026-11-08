@@ -7,6 +7,7 @@ from mixer.vocab import EXACT_IN_MUSDB
 from torch.utils.data import Dataset
 
 from .sources import GROUPS, group_sources, source_names
+from .segments import exact_source
 from .tags import single_source
 
 CLASS_INDEX = {c: i for i, c in enumerate(CLASSES)}
@@ -60,10 +61,14 @@ class SnippetDataset(Dataset):
 
     def __init__(self, tracks, config: MixConfig, length: int, seed_base: int = 0,
                  tasks=("instruments",), source_set: str = "musdb4", source=None, source_tags: dict | None = None,
-                 promote_single: bool = False):
+                 promote_single: bool = False, exact_stems: dict | None = None, solo_windows: dict | None = None,
+                 p_solo: float = 0.0):
         self._tracks = None if tracks is None else list(tracks)
         self.source_tags = source_tags  # {MUSDB18 song: per-source state}, see `trainer.tags`
         self.promote_single = promote_single  # a tagged `other` stem of one source becomes that source, all targets known
+        self.exact_stems = exact_stems  # {MUSDB18 song: (source, [interruptions])} from labels/stems.csv, see `trainer.segments`
+        self.solo_windows = solo_windows  # {MUSDB18 song: [(start s, end s, source)]} from labels/segments.csv
+        self.p_solo = p_solo  # chance that a snippet of a song with solo windows is placed inside one of them
         self.source = source
         self.config = config
         self.length = length
@@ -105,7 +110,12 @@ class SnippetDataset(Dataset):
 
     def render_item(self, track, seed: int) -> dict:
         """The item for one rendering of `track` with `seed` (what `__getitem__` does for its own track and seed)."""
-        snippet = render_snippet(track, seed, self.config)
+        window = None
+        if "separation" in self.tasks and self.p_solo > 0 and self.solo_windows and track.name in self.solo_windows:
+            pick = np.random.default_rng([seed, 7919])  # own stream: choosing a window must not change the rendering's draws
+            if pick.random() < self.p_solo:
+                window = self.solo_windows[track.name][int(pick.integers(len(self.solo_windows[track.name])))]
+        snippet = render_snippet(track, seed, self.config, start_window=None if window is None else window[:2])
         labels = snippet.labels
         item = {}
         if "instruments" in self.tasks:
@@ -118,13 +128,18 @@ class SnippetDataset(Dataset):
             state = None  # the hand-made tags of this song (see `trainer.tags`), if there are any
             if idx is not None and self.source_tags is not None and labels["dataset"] == "musdb18":
                 state = self.source_tags.get(labels["track"])
-            if self.promote_single and state is not None and mask[idx].min() == 0.0:
-                only = single_source(state, self.source_set)
-                if only is not None:  # the unlabelled stem is one source: move it there, every target is known
-                    if only != idx[-1]:  # the group's last source (`other`) carries the unlabelled mixture
-                        sources[only] += sources[idx[-1]]
-                        sources[idx[-1]] = 0.0
-                    mask[idx] = 1.0
+            only = None
+            if idx is not None and labels["dataset"] == "musdb18" and mask[idx].min() == 0.0:
+                span = (labels["start_seconds"], labels["start_seconds"] + labels["source_seconds"])
+                song = labels["track"]  # the listening labels are finer than the song tags: they come first
+                only = exact_source(span, (self.exact_stems or {}).get(song), (self.solo_windows or {}).get(song))
+                if only is None and self.promote_single and state is not None:
+                    only = single_source(state, self.source_set)
+            if only is not None:  # the unlabelled stem is one source: move it there, every target is known
+                if only != idx[-1]:  # the group's last source (`other`) carries the unlabelled mixture
+                    sources[only] += sources[idx[-1]]
+                    sources[idx[-1]] = 0.0
+                mask[idx] = 1.0
             item["mix"] = torch.from_numpy(np.ascontiguousarray(as_stereo(snippet.mix).T))
             item["sources"] = torch.from_numpy(np.ascontiguousarray(sources.transpose(0, 2, 1)))
             item["sources_mask"] = torch.from_numpy(mask)

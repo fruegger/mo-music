@@ -1,0 +1,74 @@
+﻿split,song,stem,instrument,start_s,end_s,verdict
+"train","Clara Berry And Wooldog - Stella",other,piano,147.5,152.5,solo
+"train","Clara Berry And Wooldog - Stella",other,piano,75.0,80.0,solo
+"train","Clara Berry And Wooldog - Stella",other,piano,0.0,5.0,solo
+"train","Clara Berry And Wooldog - Stella",other,piano,65.0,70.0,solo
+"train","Clara Berry And Wooldog - Waltz For My Victims",other,piano,7.5,12.5,solo
+"train","Clara Berry And Wooldog - Waltz For My Victims",other,piano,42.5,47.5,solo
+"train","Clara Berry And Wooldog - Waltz For My Victims",other,piano,100.0,105.0,solo
+"train","Clara Berry And Wooldog - Waltz For My Victims",other,piano,2.5,7.5,solo
+"train","Drumtracks - Ghost Bitch",other,piano,340.0,345.0,solo
+"train","Drumtracks - Ghost Bitch",other,piano,27.5,32.5,solo
+"train","Drumtracks - Ghost Bitch",other,piano,37.5,42.5,solo
+"train","Drumtracks - Ghost Bitch",other,piano,115.0,120.0,mixed
+"train","Giselle - Moss",other,organ,145.0,150.0,mixed
+"train","Giselle - Moss",other,organ,177.5,182.5,mixed
+"train","Giselle - Moss",other,organ,150.0,155.0,mixed
+"train","Giselle - Moss",other,organ,155.0,160.0,mixed
+"train","Matthew Entwistle - Dont You Ever",other,piano,17.5,22.5,solo
+"train","Matthew Entwistle - Dont You Ever",other,piano,7.5,12.5,solo
+"train","Matthew Entwistle - Dont You Ever",other,piano,0.0,5.0,solo
+"train","Matthew Entwistle - Dont You Ever",other,piano,12.5,17.5,solo
+"train","Skelpolu - Human Mistakes",other,piano,297.5,302.5,solo
+"train","Skelpolu - Human Mistakes",other,piano,302.5,307.5,solo
+"train","Skelpolu - Human Mistakes",other,piano,292.5,297.5,mixed
+"train","Skelpolu - Human Mistakes",other,piano,100.0,105.0,mixed
+"train","Strand Of Oaks - Spacestation",other,piano,135.0,140.0,solo
+"train","Strand Of Oaks - Spacestation",other,piano,145.0,150.0,solo
+"train","Strand Of Oaks - Spacestation",other,piano,140.0,145.0,solo
+"train","Strand Of Oaks - Spacestation",other,piano,72.5,77.5,mixed
+"train","Sweet Lights - You Let Me Down",other,piano,5.0,10.0,solo
+"train","Sweet Lights - You Let Me Down",other,piano,207.5,212.5,solo
+"train","Sweet Lights - You Let Me Down",other,piano,20.0,25.0,solo
+"train","Sweet Lights - You Let Me Down",other,piano,90.0,95.0,mixed
+"train","Swinging Steaks - Lost My Way",other,piano,2.5,7.5,mixed
+"train","Swinging Steaks - Lost My Way",other,organ,222.5,227.5,mixed
+"train","Traffic Experiment - Sirens",other,piano,2.5,7.5,solo
+"train","Traffic Experiment - Sirens",other,piano,7.5,12.5,mixed
+"train","Triviul - Angelsaint",other,organ,200.0,205.0,mixed
+"train","Triviul - Angelsaint",other,organ,212.5,217.5,mixed
+"train","Triviul - Angelsaint",other,organ,60.0,65.0,mixed
+"train","Triviul - Angelsaint",other,organ,192.5,197.5,mixed
+"train","Triviul - Dorothy",other,organ,95.0,100.0,solo
+"test","Cristina Vane - So Easy",other,piano,217.5,222.5,mixed
+"test","Cristina Vane - So Easy",other,organ,215.0,220.0,mixed
+"test","Cristina Vane - So Easy",other,organ,150.0,155.0,mixed
+"test","Little Chicago's Finest - My Own",other,piano,115.0,120.0,solo
+"test","Little Chicago's Finest - My Own",other,piano,180.0,185.0,solo
+"test","Little Chicago's Finest - My Own",other,piano,40.0,45.0,solo
+"test","Little Chicago's Finest - My Own",other,piano,275.0,280.0,mixed
+"test","M.E.R.C. Music - Knockout",other,piano,70.0,75.0,solo
+"test","M.E.R.C. Music - Knockout",other,piano,80.0,85.0,solo
+"test","M.E.R.C. Music - Knockout",other,piano,57.5,62.5,solo
+"test","M.E.R.C. Music - Knockout",other,piano,75.0,80.0,solo
+"test","Mu - Too Bright",other,piano,7.5,12.5,solo
+"test","Mu - Too Bright",other,piano,20.0,25.0,solo
+"test","Mu - Too Bright",other,piano,0.0,5.0,solo
+"test","Mu - Too Bright",other,piano,25.0,30.0,mixed
+"test","Speak Softly - Broken Man",other,piano,82.5,87.5,solo
+"test","Speak Softly - Broken Man",other,piano,35.0,40.0,mixed
+"test","Speak Softly - Broken Man",other,piano,27.5,32.5,solo
+"test","Speak Softly - Broken Man",other,piano,20.0,25.0,solo
+"test","Speak Softly - Like Horses",other,piano,2.5,7.5,solo
+"test","Speak Softly - Like Horses",other,piano,167.5,172.5,solo
+"test","Speak Softly - Like Horses",other,piano,135.0,140.0,unsure
+"test","Speak Softly - Like Horses",other,piano,265.0,270.0,solo
+"test","The Easton Ellises (Baumi) - SDRNR",other,piano,120.0,125.0,mixed
+"test","The Easton Ellises (Baumi) - SDRNR",other,piano,0.0,5.0,unsure
+"test","The Easton Ellises (Baumi) - SDRNR",other,piano,65.0,70.0,mixed
+"test","The Easton Ellises (Baumi) - SDRNR",other,piano,162.5,167.5,mixed
+"test","The Mountaineering Club - Mallory",other,piano,5.0,10.0,solo
+"test","The Mountaineering Club - Mallory",other,piano,12.5,17.5,solo
+"test","The Mountaineering Club - Mallory",other,piano,25.0,30.0,mixed
+"test","The Mountaineering Club - Mallory",other,piano,17.5,22.5,mixed
+"test","Zeno - Signs",other,piano,0.0,5.0,mixed
