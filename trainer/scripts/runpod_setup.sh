@@ -54,6 +54,9 @@ fetch_musdb() {
 }
 
 case "${1:-}" in
+install)
+    install_code   # only the code and its dependencies (a restarted pod loses them; /workspace keeps the data)
+    ;;
 data-musdb)
     # MUSDB18 only (4.7 GB download, about 12 GB of disk at the peak, 7.5 GB left): no Slakh, a 20-30 GB volume is enough.
     install_code
@@ -83,6 +86,8 @@ train)
     if [ -n "${SEED:-}" ]; then
         sed -i -e "s/^  seed: .*/  seed: $SEED/" -e 's#^out_dir: \(.*\)$#out_dir: \1'"-s$SEED"'#' "$cfg"
     fi
+    # A pod restarted without a GPU (none free) would train on the CPU for the whole HOURS cap: refuse, unless ALLOW_CPU=1.
+    python -c 'import sys, torch; sys.exit(0 if torch.cuda.is_available() else 1)' || [ "${ALLOW_CPU:-0}" = "1" ] || { echo "no GPU on this pod (torch.cuda.is_available() is False): not training. ALLOW_CPU=1 overrides."; exit 3; }
     echo "nproc=$(nproc), usable CPUs=$cpus, num_workers=$workers, GPU: $(nvidia-smi --query-gpu=name --format=csv,noheader || echo none)"
     resume=()
     [ -n "${RESUME:-}" ] && resume=(--resume "$RESUME")
