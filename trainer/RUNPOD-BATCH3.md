@@ -1,4 +1,4 @@
-# Pod batch 3 (draft): does Slakh2100 at a small weight help?
+# Pod batch 3: does Slakh2100 at a small weight help?
 
 Question: Slakh2100 (synthesised, CC BY 4.0, exact stems for guitar, piano, organ, strings, synths) is the only licensable source of exact
 keys and piano data. Earlier pod runs with Slakh at equal weight scored about 3 dB worse on real music than MUSDB18-only (before the
@@ -42,3 +42,20 @@ numbers), so nothing under 1 dB counts as a gain; losses are judged at 0.5 dB.
 - **Slakh hurts** (another source more than 0.5 dB below D at both weights): drop Slakh for good (as the earlier runs suggested) and delete the volume.
 - Limits of the test: MUSDB18 keys is 10 items and studio keys one song (Just Me Alone), so a gain in keys may be hard to see, while harm to drums/bass/vocals/guitar shows
   clearly. The Slakh validation score only shows that the model learns the synthetic data; it does not count.
+
+## Results (2026-11-09; mean of the last 3 epochs, SI-SDR improvement in dB; drums/bass/vocals/guitar/keys)
+| run | MUSDB18 | studio (swapped split) |
+|---|---|---|
+| D control, seeds 0 / 1 (batch 2) | 6.1 / 6.3 / 5.7 / 6.8 / 4.5 and 5.3 / 5.9 / 5.3 / 6.4 / 4.5 | 7.7 / 3.0 / 10.5 / 3.2 / 4.7 and 7.8 / 3.4 / 8.4 / 3.7 / 8.1 |
+| E slakh 0.1, seed 0 | 5.6 / 5.6 / 3.6 / 6.3 / 4.6 | 7.7 / 2.8 / 9.9 / 2.9 / 12.2 |
+| E slakh 0.1, seed 1 | 5.6 / 5.6 / 4.2 / 6.1 / 4.5 | 7.7 / 3.1 / 8.5 / 3.7 / 13.3 |
+| F slakh 0.3, seed 0 | 5.4 / 5.8 / 3.4 / 5.7 / 4.9 | 7.1 / 3.4 / 10.0 / 3.2 / 12.6 |
+| F slakh 0.3, seed 1 | 5.8 / 6.0 / 4.2 / 5.6 / 5.3 | 7.7 / 3.0 / 8.5 / 3.1 / 12.1 |
+
+Means over seeds, E / F minus D: MUSDB18 drums -0.1 / -0.1, bass -0.5 / -0.2, **vocals -1.6 / -1.7**, guitar -0.4 / -0.95, keys +0.05 / +0.6;
+studio drums -0.05 / -0.35, bass -0.25 / 0, vocals -0.25 / -0.2, guitar -0.15 / -0.3, **keys +6.4 / +6.0**.
+
+**Outcome by the rules: not adopted.** "Slakh helps" fails (MUSDB18 keys under +1 dB); MUSDB18 vocals is more than 0.5 dB below D at both
+weights and on both seeds ("hurts" branch to the letter). But studio keys rises by about 6 dB at both weights on both seeds (D's two seeds
+differ by 3.4 dB there; one song), which the rules do not cover. The vocal loss is the same at 0.1 and 0.3, so it is not simply a dose effect.
+Speed: about 1.1 min per epoch (48 CPUs, 12 workers, A4500), a run about 25 min. Next: batch 4 (`RUNPOD-BATCH4.md`), the vocal loss.
