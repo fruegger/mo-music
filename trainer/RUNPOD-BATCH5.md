@@ -18,6 +18,14 @@ same sources, same learning rate (not tuned for the bigger nets, see the limits)
 Parameter counts are measured (`Separator(6, 2, 2048, 1024, base, depth)`); the speed on the pod is not: a CPU forward-backward of one batch is
 about 3x slower for I and about 7x for L than for D, the GPU factor is unknown because the earlier runs were partly data-bound.
 
+## Data on the pod's local disk, results on the volume
+Network volumes were slow in batches 3 and 4 (Slakh scan by every worker, and an unmeasured share of the 2 min per epoch). The data here is small
+(MUSDB18 prepared 4.7 GB, studio 0.6 GB), so the runner **copies both to the pod's local disk** (`/root/data`, container disk, about 5.3 GB;
+it refuses to start if `df` shows under 15 GB free there) and trains from the copy through its own sources log (`configs/runpod-sources-batch5.log`,
+paths under `/root/data`). The volume keeps only the master copy of the data and the results (`/workspace/runs/b5-*`, the bundle), so a replaced pod
+starts again with one `cp` (about 1-2 min) instead of a download. The copy time and the time per epoch of the first run are printed in the log;
+D's 1.1-1.5 min per epoch is the comparison. A copy happens once per pod, not per run.
+
 ## Cost (estimates, not measured)
 D took about 25 min per run (A4500, 1.1 min per epoch with 12 workers; 2 min on the Blackwell card). Guess: I about 30-40 min, L about 1-1.5 h,
 J about 75 min: 3-3.5 h in all, about $2-3 at $0.7/h. The Slakh volume is deleted. This batch needs about 6 GB (MUSDB18 prepared 4.7 GB,
