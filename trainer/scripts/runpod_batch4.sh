@@ -13,7 +13,12 @@ cd "$(dirname "$0")/.."
 [ -d /workspace/MUSDB18_prepared/train ] || { echo "MUSDB18_prepared is missing: run 'bash scripts/runpod_setup.sh data' first"; exit 1; }
 S=/workspace/studio_prepared
 [ -d "$S/train/Shimmering Star" ] && [ -d "$S/test/In My Belief" ] || { echo "studio split is not the swapped one (batch 2 does the swap):"; ls "$S/train" "$S/test"; exit 1; }
-python -c 'import sys, torch; sys.exit(0 if torch.cuda.is_available() else 1)' || { echo "no GPU on this pod"; exit 1; }
+python - <<'PY' || { echo "Slakh index failed"; exit 1; }
+from pathlib import Path
+from mixer.sources import slakh_index
+for split in ("train", "validation"):
+    print(f"Slakh {split}: {len(slakh_index(Path('/workspace/slakh2100'), split))} tracks indexed")
+PY
 bash scripts/runpod_setup.sh install || { echo "install failed"; exit 1; }
 # One scan of Slakh for all runs and workers (the index file lives on the volume; before this every loader worker rescanned it over the network)
 python -c 'from pathlib import Path; from mixer.sources import slakh_index; [print(f"Slakh {s}: {len(slakh_index(Path(\"/workspace/slakh2100\"), s))} tracks indexed") for s in ("train", "validation")]' || { echo "Slakh index failed"; exit 1; }
