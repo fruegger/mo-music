@@ -20,9 +20,11 @@ about 3x slower for I and about 7x for L than for D, the GPU factor is unknown b
 
 ## Cost (estimates, not measured)
 D took about 25 min per run (A4500, 1.1 min per epoch with 12 workers; 2 min on the Blackwell card). Guess: I about 30-40 min, L about 1-1.5 h,
-J about 75 min: 3-3.5 h in all, about $2-3 at $0.7/h. The network volume (about $0.35/day) still holds MUSDB18_prepared and the swapped studio
-split, so it is kept until this batch is done (no Slakh needed). **After the first epoch of L, check the time: over 6 min per epoch (2 h per
-run), stop and think.**
+J about 75 min: 3-3.5 h in all, about $2-3 at $0.7/h. The Slakh volume is deleted. This batch needs about 6 GB (MUSDB18 prepared 4.7 GB,
+the swapped studio split 0.6 GB, the runs), so a **20 GB network volume** (about $1.4 a month, $0.05 a day) is enough and keeps the data when a
+pod is stopped or replaced; delete it when the batch is done. One-time setup, about 20 min: pod on the volume, `bash scripts/runpod_setup.sh data-musdb`,
+upload and unzip `C:\workarea\studio_prepared_swapped.zip` into `/workspace` (the split is already swapped), Python 3.11 venv on `/workspace/venv`.
+**After the first epoch of L, check the time: over 6 min per epoch (2 h per run), stop and think.**
 
 ## Decision rules (fixed before the run)
 Metric: the mean of the SI-SDR improvement of drums, bass and vocals on MUSDB18 (D: 5.7 / 6.1 / 5.5, mean 5.8) and on the studio test
