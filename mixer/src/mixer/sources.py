@@ -1,6 +1,7 @@
 """Multitrack sources: tracks made of labelled stems, loaded lazily."""
 
 import json
+import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -77,38 +78,77 @@ def _lazy(fn, *args):
     return get
 
 
-def slakh_tracks(root: Path, split: str) -> Iterator[Track]:
-    """Slakh2100: `<split>/TrackNNNNN/{mix.flac (optional), stems/Sxx.flac, metadata.yaml}`."""
-    for track_dir in sorted((root / split).glob("Track*")):
-        meta = yaml.safe_load((track_dir / "metadata.yaml").read_text(encoding="utf-8"))
+SLAKH_INDEX = ".mixer-index.json"  # in the split folder; delete it if the dataset changes
+SLAKH_INDEX_VERSION = 1
+
+
+def _slakh_scan(split_dir: Path) -> list[dict]:
+    """The slow part: one metadata.yaml, about 40 file-existence checks and one audio header per track. On a network
+    volume that takes minutes, and every data-loader worker used to do it for itself."""
+    loader = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
+    out = []
+    for track_dir in sorted(split_dir.glob("Track*")):
+        meta = yaml.load((track_dir / "metadata.yaml").read_text(encoding="utf-8"), Loader=loader)
         stems = []
         for sid, info in meta["stems"].items():
-            path = track_dir / "stems" / f"{sid}.flac"
-            if not info.get("audio_rendered") or not path.exists():
+            if not info.get("audio_rendered") or not (track_dir / "stems" / f"{sid}.flac").exists():
                 continue
-            midi = track_dir / "MIDI" / f"{sid}.mid"
-            stems.append(
-                Stem(
-                    sid,
-                    SLAKH_CLASSES[info["inst_class"]],
-                    info["inst_class"],
-                    lambda s, n, p=path: _read(p, s, n),
-                    bool(info["is_drum"]),
-                    info.get("midi_program_name", ""),
-                    _lazy(midi_onsets, midi) if midi.exists() else None,
-                    "midi" if midi.exists() else None,
-                )
-            )
+            stems.append({"id": sid, "class": info["inst_class"], "drum": bool(info["is_drum"]),
+                          "program": info.get("midi_program_name", ""), "midi": (track_dir / "MIDI" / f"{sid}.mid").exists()})
         # The mix only supplies the length and sample rate, and every stem has the same. It can be left out
         # of a copy of the dataset (it is a tenth of the size), so fall back to the first stem.
         mix_path = track_dir / "mix.flac"
         if mix_path.exists():
             ref = sf.info(mix_path)
         elif stems:
-            ref = sf.info(track_dir / "stems" / f"{stems[0].name}.flac")
+            ref = sf.info(track_dir / "stems" / f"{stems[0]['id']}.flac")
         else:
             continue
-        yield Track("slakh2100", track_dir.name, ref.samplerate, ref.frames, stems)
+        out.append({"name": track_dir.name, "rate": ref.samplerate, "frames": ref.frames, "stems": stems})
+    return out
+
+
+def slakh_index(root: Path, split: str) -> list[dict]:
+    """The scanned tracks of a split, read from `<split>/.mixer-index.json` if it is there, otherwise scanned and saved."""
+    split_dir = root / split
+    cache = split_dir / SLAKH_INDEX
+    try:
+        data = json.loads(cache.read_text(encoding="utf-8"))
+        if data.get("version") == SLAKH_INDEX_VERSION:
+            return data["tracks"]
+    except (OSError, ValueError, KeyError):
+        pass
+    tracks = _slakh_scan(split_dir)
+    try:  # written to a file of its own name first: several workers may get here at once
+        tmp = cache.with_name(f"{SLAKH_INDEX}.{os.getpid()}.tmp")
+        tmp.write_text(json.dumps({"version": SLAKH_INDEX_VERSION, "tracks": tracks}), encoding="utf-8")
+        os.replace(tmp, cache)
+    except OSError:
+        pass  # a read-only copy of the dataset still works, just slowly
+    return tracks
+
+
+def slakh_tracks(root: Path, split: str) -> Iterator[Track]:
+    """Slakh2100: `<split>/TrackNNNNN/{mix.flac (optional), stems/Sxx.flac, metadata.yaml}`."""
+    for t in slakh_index(root, split):
+        track_dir = root / split / t["name"]
+        stems = []
+        for st in t["stems"]:
+            path = track_dir / "stems" / f"{st['id']}.flac"
+            midi = track_dir / "MIDI" / f"{st['id']}.mid"
+            stems.append(
+                Stem(
+                    st["id"],
+                    SLAKH_CLASSES[st["class"]],
+                    st["class"],
+                    lambda s, n, p=path: _read(p, s, n),
+                    st["drum"],
+                    st["program"],
+                    _lazy(midi_onsets, midi) if st["midi"] else None,
+                    "midi" if st["midi"] else None,
+                )
+            )
+        yield Track("slakh2100", t["name"], t["rate"], t["frames"], stems)
 
 
 # MUSDB18 .stem.mp4 holds five AAC streams, in this order.

@@ -24,3 +24,15 @@ def test_slakh_track_loads_without_mix_flac(tmp_path):
     (b,) = iter_tracks("slakh2100", tmp_path / "without", "train")
     assert (b.sample_rate, b.n_frames) == (a.sample_rate, a.n_frames) == (44100, 44100)
     assert [s.name for s in b.stems] == ["S00", "S01"] and b.stems[0].load(0, 1000).shape[0] == 1000
+
+
+def test_second_listing_reads_the_index_not_the_files(tmp_path):
+    make_track(tmp_path, True)
+    first = list(iter_tracks("slakh2100", tmp_path, "train"))
+    index = tmp_path / "train" / ".mixer-index.json"
+    assert index.exists()
+    (tmp_path / "train" / "Track00001" / "metadata.yaml").unlink()  # a rescan would fail now
+    (b,) = iter_tracks("slakh2100", tmp_path, "train")
+    assert (b.name, b.sample_rate, b.n_frames) == (first[0].name, 44100, 44100)
+    assert [(s.name, s.label, s.source_class) for s in b.stems] == [(s.name, s.label, s.source_class) for s in first[0].stems]
+    assert b.stems[0].load(0, 1000).shape[0] == 1000
