@@ -1,0 +1,54 @@
+# POD BATCH 4, arm G: batch 3's arm E (Slakh weight 0.1) with MUSDB vocals mixed into EVERY Slakh item (vocal_mix p 1.0 instead of 0.7), so no Slakh item
+# has a silent vocals target. Tests whether those items cause the MUSDB18 vocals loss of batch 3. Compare with batch 2's D and batch 3's E (RUNPOD-BATCH4.md).
+task: separation
+sources: configs/runpod-sources-batch3.log
+out_dir: /workspace/runs/b4-g-vocal-always
+
+datasets:
+  - name: slakh2100
+    train_split: train
+    val_split: validation
+    weight: 0.1
+    vocal_mix: {from: musdb18-prepared, split: train, p: 1.0, gain_db_range: [-6.0, 6.0]}
+  - {name: musdb18-prepared, train_split: train, val_split: test, weight: 1.0}   # MUSDB18 has no validation split
+  - {name: studio, train_split: train, val_split: test, weight: 0.25}   # about a fifth of the training items
+
+separation:
+  mask: softmax
+  source_set: musdb6
+  n_fft: 2048
+  hop: 1024
+  base_channels: 12
+  depth: 3
+  source_weights: {vocals: 4.0}
+  tags: ../labels/musdb18-other-tags.csv   # relative to the trainer folder
+  promote_single: true
+  present_weights: {keys: 4.0}
+
+mix:
+  seconds: 3.0
+  gain_db_range: [-12.0, 6.0]
+  p_stem_dropped: 0.05   # vocals are rarely left out
+  effects: true
+  p_tempo: 0.0   # off on the pod: tempo/pitch rendering is ~20x slower per item and makes the run data-bound
+  p_pitch: 0.0
+
+val_mix:
+  effects: false   # train with effects, tempo and pitch changes; score on clean mixes (what real recordings are)
+  p_tempo: 0.0
+  p_pitch: 0.0
+
+train:
+  epochs: 20
+  steps_per_epoch: 500   # 10,000 steps, 2x the longest laptop run
+  batch_size: 8
+  lr: 0.002
+  warmup_steps: 250
+  lr_final_fraction: 0.05
+  grad_clip: 1.0
+  ema_decay: 0.999
+  num_workers: 8   # runpod_setup.sh sets this to the pod's usable CPUs - 1
+  prefetch_factor: 2
+  val_snippets: 48
+  val_seed_base: 1000000
+  seed: 0
