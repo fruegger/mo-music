@@ -1,4 +1,4 @@
-# Pod batch 5 (draft, rules only): is the separator too small and too briefly trained?
+# Pod batch 5 (configs, runner and rules ready): is the separator too small and too briefly trained?
 
 Reference comparison (2026-11-10, 12 clean 10 s excerpts per set, `scripts/reference_compare.py`): Demucs `htdemucs_6s` is 8-10 dB ahead of our
 recipe on drums, bass, guitar and the group (MUSDB18 drums +13.6 vs +5.4, studio drums +18.1 vs +7.8, studio guitar +12.5 vs 4-5.7), about 8 dB on
@@ -13,7 +13,9 @@ with the data and recipe unchanged (D of batch 2: MUSDB18 + studio, six sources,
 | L `l-large` | `base_channels` 48, depth 4 | 17.5 M | 10,000 |
 | J `j-long` | D's network, 30,000 steps (60 epochs of 500) | 0.27 M | 30,000 |
 
-Seed 0 only at first (3 runs). A second seed (seed 1) is run for an arm only when the rules below put it in the grey zone. Everything else as D:
+Run order: I, J, L. L is the slowest arm, so it runs last and the cost is known by then.
+
+Seed 0 only at first (3 runs). Check how many seeds D (batch 2) had and note it with the results: if D is a single seed, every "within 1 dB of D" below is looser than it looks. A second seed (seed 1) is run for an arm only when the rules below put it in the grey zone. Everything else as D:
 same sources, same learning rate (not tuned for the bigger nets, see the limits), no Slakh, `val_snippets` 48 clean validation.
 Parameter counts are measured (`Separator(6, 2, 2048, 1024, base, depth)`); the speed on the pod is not: a CPU forward-backward of one batch is
 about 3x slower for I and about 7x for L than for D, the GPU factor is unknown because the earlier runs were partly data-bound.
@@ -39,11 +41,13 @@ Metric: the mean of the SI-SDR improvement of drums, bass and vocals on MUSDB18 
 (D: 7.75 / 3.2 / 9.45, mean 6.8), last 3 epochs, as in batches 1-4. Seed noise is about 1 dB per number, a bit less on a mean of three, so a gain of 2 dB
 is clear, 1-2 dB is a grey zone. Guitar and keys are read afterwards, not part of the decision.
 - **Capacity is a main lever:** I or L gains at least 2 dB on the MUSDB18 mean and at least 1.5 dB on the studio mean, and none of drums/bass/vocals
-  is lower than D on MUSDB18. If L is at least 0.5 dB above I, size keeps helping: the next batch scales further (and then data matters again).
+  is more than 1 dB lower than D on MUSDB18 (one seed per arm, so a strict "not lower" would fail on noise alone). If L is at least 0.5 dB above I, size keeps helping: the next batch scales further (and then data matters again).
 - **Training length is a lever:** J gains at least 1 dB on the MUSDB18 mean (the long laptop run suggested more steps help). Then longer
   training is added to whichever size wins in the next batch.
 - **Grey zone** (best arm between +1 and +2 dB on the MUSDB18 mean): run seed 1 of that arm only, then decide with the two-seed mean by the rules above.
-- **Nothing helps** (I, L and J all within 1 dB of D on both sets): capacity and length are not the bottleneck at this scale. The gap is then
+- **Nothing helps** (I, L and J all within 1 dB of D on both sets): first look at the training-loss curves of I and L. If they are still falling at step 10,000
+  (or L diverged at lr 0.002), the result is **inconclusive**, not negative: the bigger nets were undertrained, so run the better of them for 30,000 steps before concluding. Only if the losses
+  have flattened: capacity and length are not the bottleneck at this scale. The gap is then
   the architecture (a mask on a spectrogram against a hybrid waveform + spectrogram model) or the amount of data; no more tuning of this network, the next question is a
   different architecture.
 - **A bigger net is worse** (more than 1 dB below D): compare the training loss with D's. A lower training loss with a worse validation is
@@ -51,6 +55,6 @@ is clear, 1-2 dB is a grey zone. Guitar and keys are read afterwards, not part o
   the same arm, not a new one).
 - Not decided here: whether any of this is worth deploying; the table of 12 excerpts per set is for judging by ear and by dB.
 
-Limits: one seed per arm at first; the learning rate is D's (0.002) and not tuned for the wider nets; the studio numbers are 12 excerpts of 5 songs
+Limits: even a winning arm will leave most of the 8-10 dB gap (the 2 dB bar is a "keep going" signal, not a target); one seed per arm at first; the learning rate is D's (0.002) and not tuned for the wider nets; the studio numbers are 12 excerpts of 5 songs
 (vocals 6 and keys 4 audible), which is why the decision uses MUSDB18 first and the studio only as a check; the reference model has more data and
 a different architecture, so closing the gap fully is not expected from size alone.

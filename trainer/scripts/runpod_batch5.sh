@@ -15,7 +15,7 @@ cd "$(dirname "$0")/.."
 
 MASTER="${MASTER:-/workspace}"
 LOCAL="${LOCAL:-/root/data}"   # the sources log configs/runpod-sources-batch5.log points here
-ARMS="${ARMS:-i-wide l-large j-long}"
+ARMS="${ARMS:-i-wide j-long l-large}"
 SEEDS="${SEEDS:-0}"
 
 [ -d "$MASTER/MUSDB18_prepared/train" ] || { echo "MUSDB18_prepared is missing on the volume: run 'bash scripts/runpod_setup.sh data-musdb' first"; exit 1; }
@@ -46,7 +46,8 @@ for seed in $SEEDS; do
     for arm in $ARMS; do
         echo "=== $(date +%H:%M) arm $arm seed $seed ==="
         CONFIG="configs/runpod-b5-$arm.yaml" HOURS="${HOURS_PER_RUN:-3}" SEED="$seed" bash scripts/runpod_setup.sh train
-        echo "=== $(date +%H:%M) arm $arm seed $seed finished (exit $?) ==="
+        rc=$?
+        echo "=== $(date +%H:%M) arm $arm seed $seed finished (exit $rc) ==="
     done
 done
 
