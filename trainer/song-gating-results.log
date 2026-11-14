@@ -1,0 +1,39 @@
+  10/50 songs
+  20/50 songs
+  30/50 songs
+  40/50 songs
+  50/50 songs
+
+50 songs, 20 s excerpts, 2 model(s), recogniser presence-cpu-musdb-seed0
+
+full: 43% of the absent sources found; 97% of the present sources kept  [rec0.5/0.05]
+  condition       improvement dB  present removed %  leakage into absent dB
+  none                     +5.07                0.0                   -17.3
+  oracle                   +5.11                0.0                   -99.4
+  rec0.5/0.05              +4.96                2.6                   -49.5
+  rec0.35/0.05             +4.96                2.6                   -49.5
+  rec0.5/0.2               +4.80                5.2                   -49.5
+
+no-vocals: 65% of the absent sources found; 97% of the present sources kept  [rec0.5/0.05]
+  condition       improvement dB  present removed %  leakage into absent dB
+  none                     +3.63                0.0                   -23.6
+  oracle                   +4.45                0.0                  -100.0
+  rec0.5/0.05              +4.30                3.4                   -72.2
+  rec0.35/0.05             +4.18                2.1                   -50.3
+  rec0.5/0.2               +4.13                6.2                   -79.5
+
+no-drums: 48% of the absent sources found; 98% of the present sources kept  [rec0.5/0.05]
+  condition       improvement dB  present removed %  leakage into absent dB
+  none                     +3.94                0.0                   -14.0
+  oracle                   +4.67                0.0                   -99.9
+  rec0.5/0.05              +4.07                2.1                   -54.2
+  rec0.35/0.05             +4.02                2.8                   -37.2
+  rec0.5/0.2               +4.05                4.2                   -60.4
+
+no-bass: 43% of the absent sources found; 95% of the present sources kept  [rec0.5/0.05]
+  condition       improvement dB  present removed %  leakage into absent dB
+  none                     +4.73                0.0                   -13.2
+  oracle                   +5.49                0.0                  -100.6
+  rec0.5/0.05              +4.51                4.8                   -48.8
+  rec0.35/0.05             +4.57                2.7                   -42.2
+  rec0.5/0.2               +4.61                5.5                   -60.5

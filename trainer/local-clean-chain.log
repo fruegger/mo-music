@@ -1,0 +1,9 @@
+20:48 start soft-s0
+22:07 done soft-s0 (exit 0)
+22:07 start soft-aug-s0
+01:47 done soft-aug-s0 (exit 0)
+01:47 start soft-s1
+03:01 done soft-s1 (exit 0)
+03:02 start soft-aug-s1
+05:10 done soft-aug-s1 (exit 0)
+05:10 chain finished

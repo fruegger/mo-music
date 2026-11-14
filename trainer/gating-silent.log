@@ -1,0 +1,18 @@
+
+source dropout 0.05: 200 snippets, 1 run(s), 150 absent-source cases
+condition   improvement dB  present removed /100  leakage into absent dB
+none           -2.45 (+/-0.00)                   0.0                   -33.0
+oracle         -1.83 (+/-0.00)                   0.0                   -91.9
+noisy          -1.77 (+/-0.00)                   7.5                   -82.1
+self-20        -0.83 (+/-0.00)                  49.1                   -60.0
+self-30        -1.29 (+/-0.00)                  26.8                   -44.9
+self-40        -1.26 (+/-0.00)                  22.8                   -42.4
+
+source dropout 0.4: 200 snippets, 1 run(s), 379 absent-source cases
+condition   improvement dB  present removed /100  leakage into absent dB
+none          -12.55 (+/-0.00)                   0.0                   -27.9
+oracle         -2.52 (+/-0.00)                   0.0                   -90.7
+noisy          -5.41 (+/-0.00)                   6.9                   -80.8
+self-20       -36.54 (+/-0.00)                  49.2                   -52.3
+self-30       -11.81 (+/-0.00)                  26.1                   -36.7
+self-40       -11.69 (+/-0.00)                  23.3                   -35.0

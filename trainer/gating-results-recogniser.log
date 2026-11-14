@@ -1,0 +1,36 @@
+
+recogniser alone, dropout 0.05 (probability >= 0.5), per source: precision / recall / present share
+  drums    0.97 /  0.90 /  0.81
+  bass     0.95 /  0.82 /  0.77
+  vocals   0.91 /  0.72 /  0.74
+  other    1.00 /  0.84 /  0.92
+
+source dropout 0.05: 200 snippets, 5 run(s), 150 absent-source cases
+condition   improvement dB  present removed /100  leakage into absent dB
+none           +3.48 (+/-0.59)                   0.0                   -19.8
+oracle         +4.15 (+/-0.57)                   0.0                   -91.9
+noisy          +3.88 (+/-0.54)                   7.5                   -81.0
+self-20        +3.46 (+/-0.59)                   7.3                   -48.9
+self-30        +3.54 (+/-0.58)                   2.1                   -29.5
+self-40        +3.49 (+/-0.59)                   0.3                   -22.2
+pred0.20       +3.65 (+/-0.54)                   3.2                   -57.9
+pred0.35       +3.91 (+/-0.54)                   8.6                   -64.6
+pred0.50       +3.98 (+/-0.55)                  17.2                   -74.8
+
+recogniser alone, dropout 0.4 (probability >= 0.5), per source: precision / recall / present share
+  drums    0.93 /  0.90 /  0.56
+  bass     0.91 /  0.87 /  0.52
+  vocals   0.90 /  0.81 /  0.49
+  other    0.94 /  0.84 /  0.54
+
+source dropout 0.4: 200 snippets, 5 run(s), 379 absent-source cases
+condition   improvement dB  present removed /100  leakage into absent dB
+none           -6.47 (+/-0.38)                   0.0                   -19.0
+oracle         +3.65 (+/-0.43)                   0.0                   -90.7
+noisy          +0.13 (+/-0.37)                   6.9                   -79.5
+self-20        -6.61 (+/-0.36)                   5.2                   -42.8
+self-30        -6.54 (+/-0.37)                   1.3                   -26.9
+self-40        -6.48 (+/-0.37)                   0.2                   -21.1
+pred0.20       -0.81 (+/-0.43)                   3.1                   -62.7
+pred0.35       +1.35 (+/-0.45)                   6.2                   -72.3
+pred0.50       +1.06 (+/-0.46)                  11.9                   -76.7
