@@ -1,0 +1,2 @@
+name | load url | local path | date | license
+MUSDB18-prepared | three MUSDB18 train songs copied by hand, in both splits, for the overfit test (OVERFIT-TEST.md) | C:\workarea\musdb18_overfit | 14.11.2026 | !! NON COMMERCIAL

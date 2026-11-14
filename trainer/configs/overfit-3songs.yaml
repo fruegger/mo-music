@@ -1,0 +1,43 @@
+# OVERFIT TEST (see OVERFIT-TEST.md): can this network fit THREE songs when nothing makes the task hard?
+# Same three songs (two with a single guitar `other` stem, one with a synth `other` stem) in train and test, so the validation
+# scores the songs it trains on. No augmentation, no effects, no stem dropped, equal source weights; softmax masks, six sources.
+# Run it for the small network (base_channels 12, depth 3, as D) and for I (base_channels 32): change base_channels and out_dir.
+task: separation
+sources: configs/overfit-sources.log
+out_dir: runs/overfit-3songs-d
+
+datasets:
+  - {name: musdb18-prepared, train_split: train, val_split: test, weight: 1.0}
+
+separation:
+  mask: softmax
+  source_set: musdb6
+  n_fft: 2048
+  hop: 1024
+  base_channels: 12
+  depth: 3
+  tags: ../labels/musdb18-other-tags.csv   # relative to the trainer folder
+  promote_single: true   # `other` of these songs is one source: exact guitar / keys targets
+
+mix:
+  seconds: 3.0
+  gain_db_range: [0.0, 0.0]   # stems at their own level
+  p_stem_dropped: 0.0
+  effects: false
+  p_tempo: 0.0
+  p_pitch: 0.0
+
+train:
+  epochs: 6
+  steps_per_epoch: 250   # 1,500 steps
+  batch_size: 8
+  lr: 0.002
+  warmup_steps: 250
+  lr_final_fraction: 0.05
+  grad_clip: 1.0
+  ema_decay: 0.999
+  num_workers: 3
+  prefetch_factor: 1
+  val_snippets: 24
+  val_seed_base: 1000000
+  seed: 0
