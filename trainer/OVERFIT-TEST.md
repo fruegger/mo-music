@@ -1,4 +1,4 @@
-# Overfit test (draft, not run): can the network fit three songs when nothing makes the task hard?
+# Overfit test (2026-11-15, run for the small network): can the network fit three songs when nothing makes the task hard?
 
 Why: `GAP-DIAGNOSTICS.md` found the oracle mask on our STFT at +12..+16 dB, our runs at +6..+7, and train scores equal to test scores: the runs **underfit**. This test separates two readings:
 (a) the network can fit a tiny set but not the whole of MUSDB18 with augmentation, so the problem is the task's difficulty, learning rate or loss weights under diversity;
@@ -29,3 +29,21 @@ Metric: the mean SI-SDR improvement of drums, bass and vocals on the three songs
 - Guitar and keys are read but not part of the decision (one song each, a handful of windows).
 
 Limits: one seed; three songs are not representative (two guitar songs, one synth song); equal weights change the recipe on purpose, so the numbers are not comparable with batches 1-5; clean windows at natural levels.
+
+## Result (arm base_channels 12, 1,500 steps, 15.4 min per epoch of 250 steps on the laptop CPU, 93 min in all)
+Validation (24 clean 3 s snippets of the same songs), last epoch: drums 9.9, bass 9.9, vocals 10.9, guitar 10.3, keys 8.3; mean of drums/bass/vocals **10.2**. The curve rose every epoch (7.7, 8.9, 9.4, 9.9, 10.1, 10.2) with the gains shrinking.
+Scored with `oracle_ceiling.py` on 60 windows of 6 s of the same songs (the rule's measurement):
+
+| | drums | bass | vocals | guitar | keys |
+|---|---|---|---|---|---|
+| oracle p=1 / p=2 | 11.6 / 12.8 | 10.8 / 11.6 | 15.2 / 16.0 | 12.8 / 13.8 | 11.7 / 12.6 |
+| run (small network) | **10.1** | **9.8** | **11.6** | 10.8 | 3.1 |
+| share of the p=1 oracle | 87% | 91% | 76% | 84% | 26% |
+| windows | 58 | 58 | 47 | 40 | 20 |
+
+**Decision by the rules: the network can fit** (mean of drums, bass and vocals 10.5, bar +10): reading (a). On the whole dataset 10,000 and 30,000 steps stay near +6, here 1,500 steps give +10.5 on three songs, so
+the network is not the limit; what the full task asks of it is (diversity, augmentation, random stem gains, loss weights, learning rate). Fitting the songs it trains on is partly memorisation: this shows the capacity to fit, not generalisation.
+- Keys are the exception: 3.1 against an oracle of 11.7 on one synth song (ANiMAL - Clinic A, a rapid sequencer), 20 windows; the validation said 8.3, so the number is noisy.
+- The 32-channel arm was **not run**: the rule needed it only to compare capacity, and the small network already fits.
+- Next (proposal): a song-count ladder from this recipe, 3 -> 10 -> 30 -> 100 songs without augmentation and with equal weights, scored on the training songs, then the augmentation and the weights added back one at a time. Too slow on the laptop (see the
+  time per step above), a pod batch.
