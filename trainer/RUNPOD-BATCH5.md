@@ -58,3 +58,26 @@ is clear, 1-2 dB is a grey zone. Guitar and keys are read afterwards, not part o
 Limits: even a winning arm will leave most of the 8-10 dB gap (the 2 dB bar is a "keep going" signal, not a target); one seed per arm at first; the learning rate is D's (0.002) and not tuned for the wider nets; the studio numbers are 12 excerpts of 5 songs
 (vocals 6 and keys 4 audible), which is why the decision uses MUSDB18 first and the studio only as a check; the reference model has more data and
 a different architecture, so closing the gap fully is not expected from size alone.
+
+## Results (2026-11-14; mean of the last 3 epochs, SI-SDR improvement in dB; seed 0, pod RTX 2000 Ada, results in `C:\workareaatch5_results`)
+
+| arm | parameters | MUSDB18 drums / bass / vocals | mean | vs D | studio drums / bass / vocals | mean | vs D |
+|---|---|---|---|---|---|---|---|
+| D (batch 2) | 0.27 M, 10,000 steps | 5.7 / 6.1 / 5.5 | 5.8 | - | 7.75 / 3.2 / 9.45 | 6.8 | - |
+| I `i-wide` | 1.9 M, 10,000 | 6.5 / 7.0 / 5.5 | 6.3 | +0.6 | 8.5 / 3.3 / 10.4 | 7.4 | +0.6 |
+| J `j-long` | 0.27 M, 30,000 | 6.8 / 6.7 / 6.0 | 6.5 | +0.7 | 9.2 / 3.5 / 11.6 | 8.1 | +1.3 |
+| L `l-large` | 17.5 M, 10,000 | 6.4 / 6.3 / 5.0 | 5.9 | +0.1 | 8.5 / 3.1 / 8.9 | 6.8 | 0.0 |
+
+Guitar / keys (not part of the decision): MUSDB18 I 7.4 / 4.6, J 7.4 / 3.2, L 6.3 / 4.2; studio I 4.2 / 8.6, J 3.9 / 7.5, L 4.1 / 8.1.
+Time: I 47 min (13:15-14:02 UTC), J started 14:02 at about 1.3 min per epoch, all three about 4.5 h with L; all runs finished (`finished: True`).
+
+**Verdict by the rules: no arm meets a lever rule.**
+- Capacity is not a main lever: I +0.6 and L +0.1 on the MUSDB18 mean (bar +2.0), studio +0.6 / 0.0 (bar +1.5). L is 0.4 dB *below* I on MUSDB18 and 0.6 below on the studio set, so size does not keep helping.
+- Training length is not a lever: J +0.7 on MUSDB18 (bar +1.0). Its MUSDB18 mean is flat from about epoch 24; vocals peaked near epoch 26 (6.6) and bass near epoch 36 (7.3) and both fell back while drums crept up, which looks like fitting the roughly 86 training songs, not learning more.
+- Grey zone: no arm between +1 and +2 on MUSDB18, so no second seed was run.
+- Bigger net worse (more than 1 dB below D): not triggered; L is level with D, vocals 0.5 dB lower (5.0 vs 5.5), within tolerance.
+- Nothing helps: holds on the MUSDB18 decision metric (all arms within 1 dB of D). One deviation: J is +1.3 on the studio mean, driven by vocals (+2.2) on 5 songs; not read as a lever. The loss column is a single noisy batch (0.01-0.05) and was not used; validation curves were.
+
+**Answer to the batch's question:** capacity (0.27 M to 17.5 M parameters) and training length (3x the steps) do not explain the 8-10 dB gap to Demucs `htdemucs_6s` with this recipe and data. No more tuning of this network; the next question is a different architecture (a hybrid waveform + spectrogram model instead of a mask on a spectrogram) or more data.
+
+Limits: one seed per arm (noise about 1 dB per number); L ran at D's learning rate (0.002), not tuned for its size, and its weak vocals alongside level drums are consistent with overfitting but that was not tested; D's seed count was not checked.
