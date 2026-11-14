@@ -59,7 +59,7 @@ Limits: even a winning arm will leave most of the 8-10 dB gap (the 2 dB bar is a
 (vocals 6 and keys 4 audible), which is why the decision uses MUSDB18 first and the studio only as a check; the reference model has more data and
 a different architecture, so closing the gap fully is not expected from size alone.
 
-## Results (2026-11-14; mean of the last 3 epochs, SI-SDR improvement in dB; seed 0, pod RTX 2000 Ada, results in `C:\workareaatch5_results`)
+## Results (2026-11-14; mean of the last 3 epochs, SI-SDR improvement in dB; seed 0, pod RTX 2000 Ada, results in `C:/workarea/batch5_results`)
 
 | arm | parameters | MUSDB18 drums / bass / vocals | mean | vs D | studio drums / bass / vocals | mean | vs D |
 |---|---|---|---|---|---|---|---|
