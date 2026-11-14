@@ -5,8 +5,9 @@
 The sources log must register `studio` at the split the runs were validated on (the swapped one: test = In My Belief,
 Just Me Alone). Renders `--snippets` clean 10 s windows (no effects, no tempo/pitch, no stem left out) at fixed seeds,
 so every run scores the very same windows, and records the SI-SDR improvement of each of the six sources in each window
-where that source is audible and its target known. Prints, per group and source: the mean over windows with a 95%
-bootstrap interval (windows resampled within a song, songs kept), the per-run means (the seed spread), and the
+where that source is audible and its target known (with `--tags ... --promote-single` on MUSDB18 test, guitar and keys are scored only
+on the songs whose `other` stem the tags say is that one source). Prints, per group and source: the mean over windows with a 95%
+bootstrap interval (songs resampled, then windows within a song), the per-run means (the seed spread), and the
 difference to the first group with its interval. The interval covers only the sampling of test windows, NOT the training
 seed: compare it with the per-run spread.
 """
@@ -23,14 +24,17 @@ from mixer import MixConfig, iter_tracks, load_registry
 from trainer.data import SnippetDataset
 from trainer.separate import load_model
 from trainer.separation import si_sdr
+from trainer.tags import load_other_tags
 
 
 def bootstrap(per_song: dict, draws: int, rng: random.Random) -> list[float]:
-    """Means of `draws` resamples: windows resampled with replacement inside each song, songs pooled."""
+    """Means of `draws` resamples: songs resampled with replacement, then windows with replacement inside each chosen song."""
     out = []
+    songs = list(per_song)
     for _ in range(draws):
         vals = []
-        for xs in per_song.values():
+        for song in (rng.choice(songs) for _ in songs):
+            xs = per_song[song]
             vals += [xs[rng.randrange(len(xs))] for _ in xs]
         out.append(sum(vals) / len(vals) if vals else float("nan"))
     return out
@@ -51,13 +55,20 @@ def main() -> None:
     ap.add_argument("--seconds", type=float, default=10.0)
     ap.add_argument("--draws", type=int, default=2000)
     ap.add_argument("--out", type=Path)
+    ap.add_argument("--tags", type=Path, help="MUSDB18 `other` tags CSV (labels/musdb18-other-tags.csv): with --promote-single, a song whose other stem is one source gets exact targets")
+    ap.add_argument("--promote-single", action="store_true")
+    ap.add_argument("--gains", type=float, nargs=2, default=(0.0, 0.0), metavar=("LO", "HI"),
+                    help="random gain per stem in dB, as in the training validation (the runs' mix.gain_db_range is -12 6); default 0 0 = stems at their own level")
     args = ap.parse_args()
 
     ds = load_registry(args.sources)[args.dataset.lower()]
     tracks = list(iter_tracks(ds.name, ds.path, args.split))
     names = [t.name for t in tracks]
-    mix = MixConfig(seconds=args.seconds, gain_db_range=(0.0, 0.0), p_stem_dropped=0.0, effects=False, p_tempo=0.0, p_pitch=0.0)
-    data = SnippetDataset(tracks, mix, args.snippets, 1_000_000, tasks=("separation",), source_set="musdb6")
+    mix = MixConfig(seconds=args.seconds, gain_db_range=tuple(args.gains), p_stem_dropped=0.0, effects=False, p_tempo=0.0, p_pitch=0.0)
+    kwargs = {}
+    if args.tags:
+        kwargs = {"source_tags": load_other_tags(args.tags, "musdb6"), "promote_single": args.promote_single}
+    data = SnippetDataset(tracks, mix, args.snippets, 1_000_000, tasks=("separation",), source_set="musdb6", **kwargs)
     print(f"{ds.name}/{args.split}: {names}, {args.snippets} windows of {args.seconds:.0f} s")
 
     groups: dict[str, list[Path]] = {}
@@ -118,7 +129,7 @@ def main() -> None:
                 d = [v for xs in common.values() for v in xs]
                 line += f"   diff vs {ref_name} {sum(d) / len(d):+5.1f} [{dl:+5.1f}, {dh:+5.1f}]"
             print(line)
-            if len(names) > 1:
+            if len(ps) <= 6:
                 print("        by song: " + "  ".join(f"{n} {sum(v) / len(v):+5.1f} (n={len(v)})" for n, v in ps.items()))
 
 

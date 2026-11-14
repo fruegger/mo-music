@@ -38,10 +38,29 @@ printed by the script ([+8.0, +9.8] for E) only cover the sampling of windows, a
   from 56.9% (D) to 54.0-54.2% (E, F) and the share unexplained rises by about 3 points. So Slakh does not put other instruments into the vocal output, it makes the vocal output slightly less faithful.
   The projection is crude ("unexplained" lumps distortion and overlap of the true sources).
 
+## MUSDB18 keys and guitar (500 clean 6 s windows over the 50 test songs, stems at their own level)
+Guitar and keys are scored on the test songs whose `other` stem the hand tags say is a single source (`labels/musdb18-other-tags.csv` with `promote_single`):
+15 guitar songs (148 windows) and 11 keys songs (105 windows). Per seed in brackets; the interval resamples songs, then windows (1,000 draws).
+
+| arm | guitar | vs D | keys | vs D |
+|---|---|---|---|---|
+| D | 1.3 (1.2 / 1.4) | - | 1.2 (1.4 / 1.0) | - |
+| E 0.1 | 1.1 (1.2 / 0.9) | -0.3 | 0.6 (1.0 / 0.2) | -0.6 [-1.6, +0.7] |
+| F 0.3 | 0.9 (0.9 / 0.9) | -0.4 | 1.8 (1.8 / 1.9) | +0.6 [-0.5, +2.1] |
+| G | 1.2 (1.2 / 1.3) | -0.1 | -0.2 (-0.5 / +0.1) | **-1.4** [-2.1, -0.8] |
+| H 0.03 | 1.2 (1.1 / 1.3) | -0.1 | 2.0 (2.7 / 1.4) | +0.8 [0.0, +2.1] |
+
+Other sources on the same windows, vs D: drums -0.3..-0.1, bass -0.3..-0.1, vocals -0.7 (E), -0.7 (F), -0.3 (G), -0.1 (H).
+- **The studio keys gain does not show up on MUSDB18.** No arm gains on guitar; on keys E is below D, F and H are +0.6 / +0.8 with intervals that include 0, G is clearly worse.
+  The +7..+9 dB on the studio organ is therefore specific to that song's timbre (Slakh has organs), not evidence that Slakh helps keys in general.
+- Guitar and keys on MUSDB18 are weak in absolute terms: about +1 dB at natural levels, against +5.8 for drums. They are the real gap, not just the distance to Demucs on drums, bass and vocals.
+- **The batch tables' MUSDB18 guitar and keys columns are a small, lucky sample.** The in-training validation uses 48 snippets (about 13 guitar and 10 keys windows) with random stem gains of -12 to +6 dB (`val_mix` only switches off effects, tempo and pitch).
+  Scoring exactly those 48 windows reproduces the tables (D: guitar 5.9, keys 4.4; table 6.8 / 4.5), but 300 windows of the same kind give guitar 3.6, keys 2.1, and at natural levels 2.5 / 1.9 (500 windows of 6 s: 1.3 / 1.2).
+  Song-to-song spread is large (guitar interval [-0.7, +6.4]). Drums, bass and vocals are far steadier (intervals about +-1 dB) and the batch 1-5 decisions rested mainly on those; but every keys or guitar claim from the in-training validation (the keys x4 fix, batch 3/4 keys thresholds) carries an error of several dB.
+
 ## Reading
 - The reason for dropping Slakh was a vocal loss of about 1.5 dB at every weight. Re-measured it is about 0.2-0.9 dB, grows with the weight, and is smallest at weight 0.03 (H) and with vocals mixed in (G).
-- The keys gain on the one studio organ song is real in the sense that it is consistent across seeds, and it also grows with the weight. Whether it carries over to keys other than an organ is **not** shown:
-  Slakh contains organ timbres, and the studio test has one organ.
+- The keys gain on the one studio organ song is consistent across seeds and grows with the weight, but it does **not** carry over to MUSDB18 keys (11 songs, see above): it looks specific to the organ timbre.
 - No weight is good on both counts: E/F have the big keys gain and the 0.8-0.9 dB vocal cost, H has almost no vocal cost and a small keys gain (+1.4).
 - Not yet decided: whether Slakh comes back. The batch 3/4 verdict was made by fixed rules and is not overturned by this note; it shows that the rules' vocal number was inflated by the measuring, and that the keys evidence is
   one song. A batch 6 would need a keys test that is not one organ (for example held-out Slakh tracks, or a second studio keys song).
