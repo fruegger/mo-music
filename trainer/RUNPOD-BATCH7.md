@@ -68,3 +68,15 @@ Open: the `sisdr` seed-1 check (grey on the mean, keys +6.4 / +3.6), the silent-
 Against `n100-clean` (Fit 8.8, Test 8.1): **Fit +0.8, Test +0.3**, no source worse, **keys +15..18 dB (from -11..-15 to +4..+6 with equal weights)**. By the written bar (Fit +1.0 and Test +0.5) it stays grey; **adopted anyway**, because the bar assumed 5x the noise that was measured and the keys effect is far outside any noise. This is a deliberate step beyond the rule's wording.
 Conclusion of batch 7: the loss is the only lever found. The SI-SDR loss (audible sources; plain L1 on silent ones) replaces waveform L1 in the recipe; the keys collapse was a loss artefact (L1 is median-like and switches off a source that is silent in most items), not a data problem, and needs no keys weight. Not lever: learning rate (0.001 / 0.002 / 0.004 flat), the LSTM context (1.72 M, no gain over the clean net, below arm I), the relative-L1 loss (-2.3 on Fit).
 Open: silent-source leakage of the sisdr models (not measured by these scores), `sisdr` on the 1.9 M network (arm I alone gave Fit +0.8), the data side (Slakh keys and the studio songs may pay off now that keys no longer collapses), gentler augmentation once a Fit/Test gap exists.
+
+## Leakage of the sisdr models into silent sources (2026-11-15, laptop, `scripts/silent_leakage.py`)
+Windows where a source's true target is silent (below -60 dB) and the mixture audible; level of the model's estimate of that source in dB re the mixture (lower is better; -40 a faint trace, -20 clearly audible). L1 = the two L1 models of batch 7 (`lrlow`, `lrhigh`, clean recipe), SISDR = `sisdr` seeds 0 and 1.
+| source | MUSDB18 test (600 windows, hand-tag promotion) L1 -> SISDR | studio test (400 windows) L1 -> SISDR |
+|---|---|---|
+| vocals | -29.0 -> **-23.5** (n 128; share above -30 dB 57% -> 82%) | -38.8 -> **-26.5** (n 62; 18% -> 80%) |
+| bass | -24.9 -> -23.3 (n 91) | -34.4 -> -29.3 (n 7) |
+| drums | -26.2 -> -24.9 (n 43) | n 1 |
+| keys | -83.9 -> -48.1 (n 183) | -77.4 -> -48.5 (n 6) |
+| guitar | -12.9 -> -11.4 (n 133) | -0.5 -> -1.0 (n 7) |
+| other | -87.0 -> -89.6 | -85.5 -> -88.8 |
+Reading: the cost of the SI-SDR loss is **more vocal bleed in instrumental windows** (+5.5 dB on MUSDB18, +12 dB on the studio songs), a little more into bass and drums. Keys is not a leak: the L1 models switch it off entirely (-84 dB, the collapse), the sisdr models give it a real output that stays at -48 dB when keys is silent (never above -40 dB). Guitar leaks heavily in both kinds (near the mixture level on the studio songs); a guess, not tested: the `other` output is almost always silent, so material that belongs there lands in guitar. Only vocals and the MUSDB18 rows rest on enough windows. Next: batch 8 (`RUNPOD-BATCH8.md`), arm `sisdr_sw10` against the vocal bleed.

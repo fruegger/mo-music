@@ -1,0 +1,47 @@
+# POD BATCH 8, arm family "sisdr_sw10": batch 7's "sisdr" recipe (n100-sisdr: Fit 9.6, Test 8.4, keys +6.4 / +3.7) with ONE change: silent_weight 10 (the L1 error of a silent source counts 10 times as much). Question and decision rules: RUNPOD-BATCH8.md.
+task: separation
+sources: configs/runpod-sources-batch6.log   # replaced by the runner
+out_dir: /workspace/runs/b6-ARM   # replaced by the runner
+
+datasets:
+  - {name: musdb18-prepared, train_split: train, val_split: test, weight: 1.0}   # train = the arm's n songs, test = the 50 real test songs
+
+separation:
+  mask: softmax
+  source_set: musdb6
+  n_fft: 2048
+  hop: 1024
+  base_channels: 12
+  depth: 3
+  tags: ../labels/musdb18-other-tags.csv   # relative to the trainer folder
+  promote_single: true
+  loss: sisdr
+  silent_weight: 10
+
+mix:
+  seconds: 3.0
+  gain_db_range: [0.0, 0.0]   # stems at their own level
+  p_stem_dropped: 0.0
+  effects: false
+  p_tempo: 0.0
+  p_pitch: 0.0
+
+val_mix:
+  effects: false
+  p_tempo: 0.0
+  p_pitch: 0.0
+
+train:
+  epochs: 20
+  steps_per_epoch: 500   # 10,000 steps
+  batch_size: 8
+  lr: 0.002
+  warmup_steps: 250
+  lr_final_fraction: 0.05
+  grad_clip: 1.0
+  ema_decay: 0.999
+  num_workers: 8   # runpod_setup.sh sets this to the pod's usable CPUs - 1
+  prefetch_factor: 2
+  val_snippets: 48
+  val_seed_base: 1000000
+  seed: 0

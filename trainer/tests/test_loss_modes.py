@@ -34,3 +34,15 @@ def test_lstm_context_keeps_the_output_shape_and_masks_add_up():
     assert out.shape == (2, 3, 2, 4096)
     _, masks = model.analyse(mix)
     assert torch.allclose(masks.sum(dim=1), torch.ones_like(masks.sum(dim=1)), atol=1e-5)
+
+
+def test_silent_weight_raises_the_loss_of_a_leak_into_a_silent_source_in_sisdr_mode():
+    torch.manual_seed(0)
+    sources = torch.randn(2, 3, 2, 8192) * 0.05
+    sources[:, 1] = 0.0  # a silent source
+    estimates = sources + torch.randn(2, 3, 2, 8192) * 0.01  # the silent source leaks
+    mask = torch.ones(2, 3)
+    mix_rms = torch.full((2,), 0.1)
+    base = separation_loss(estimates, sources, mask, loss_type="sisdr", mix_rms=mix_rms)
+    weighted = separation_loss(estimates, sources, mask, loss_type="sisdr", mix_rms=mix_rms, silent_weight=10.0)
+    assert torch.isfinite(weighted) and weighted > base
