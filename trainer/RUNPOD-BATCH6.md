@@ -121,3 +121,20 @@ Reference: `n100-clean`, Fit 8.8, Test 8.1 (mean of drums, bass, vocals, scored 
 **Together:** the next recipe takes what rules 1-4 keep (augmentation if rule 1, weights if rule 4 says keep); if both are kept, one run with both on the clean base (the old recipe minus the studio songs) shows whether they add up, before anything bigger is built on it. If neither is kept, the next lever is data (Slakh, studio songs) or the loss and mask design, on the clean recipe.
 Not decided here: guitar and keys beyond the keys check of rule 4 (too few windows); the studio songs, Slakh; any size above 1.9 M.
 Limits: one seed per arm (seed noise on the means about 0.1 dB for the clean arm, unknown for these); Fit and Test measured on clean windows, so augmentation is not scored on what it trains on; the clean base has no studio songs, so this is not a repeat of D.
+
+## Results of aug and w (2026-11-15, 12 min training each; mean of drums / bass / vocals)
+| arm | Fit | Test | keys (Test) | rule |
+|---|---|---|---|---|
+| n100-clean (2 seeds) | 8.8 | 8.1 | -11 to -15 | reference |
+| n100-aug | 6.6 (6.6 / 6.7 / 6.5) | 6.5 (6.4 / 6.5 / 6.6) | -13.3 | rule 3: hurts (-1.6 on Test), left out |
+| n100-w | 8.5 (8.0 / 8.2 / 9.4) | 8.0 (7.4 / 7.8 / 8.7) | -5.4 | rule 4, third branch: audible sources unharmed (-0.1), keys +7.5 dB but still below 0 |
+Augmentation alone explains most of D's low score (clean 8.1 -> aug 6.5, old recipe D 6.1): with a network that already underfits, the harder training mix only costs. The aug validation curve is not comparable with the others: `val_mix` overrides effects and tempo/pitch only, so validation keeps the random stem gains and dropped stems (`train.py:370`); the scored files are on clean windows and are fair.
+The w validation curve: drums/bass/vocals 7.46 (clean 7.52), keys starts at +1.7 and slides slowly to -3.1 (clean -12.3): the weights delay and shrink the keys collapse, not stop it.
+The pod log of arm I was lost (pod terminated); the aug and w curves were pasted from `/workspace/batch6-aw.log`.
+
+## Batch 6 conclusion
+- The clean recipe (no augmentation, equal weights, no studio songs) beats the old recipe by +2.0 dB on Test (8.1 vs 6.1), two seeds agree within 0.1.
+- Augmentation hurts (-1.6 on Test) with the 0.27 M network; weights are free on drums/bass/vocals and recover most of the keys loss, but keys stays negative.
+- Size is a small lever: 1.9 M gives Fit +0.8, Test +0.4 (batch 5 said the same with the old recipe).
+- More songs help Test by about 1 dB per tripling (ladder: 5.8 / 7.1 / 8.1 at 10 / 30 / 100 songs); the network fits 30 songs to 10.3 but 100 only to 8.8. The oracle is about 13.4 on Test.
+- Open: the data side (Slakh, studio songs, which cost MUSDB18 vocals before), the loss and mask design, keys (gating or keys data), the weights plus the 1.9 M network on the clean base.
