@@ -96,3 +96,28 @@ Against `n100-clean` (Fit 8.8, Test 8.1): **Fit +0.8, Test +0.4**; the Fit/Test 
 Rule 3 (grey, +0.5 to +1.0 on Fit): the validation curve was not read (the pod was terminated before the log was copied), so the "still rising" check for the 30,000-step arm is open. Treated as rule 2: 7x the parameters bought +0.8 dB of Fit and +0.4 dB of Test, the same small size effect as batch 5 (I +0.6, L +0.1), now confirmed in the clean recipe. Size is not the main lever.
 L (17.5 M) is not run: the gain per parameter is too small. The remaining levers are the data (Test rises about 1 dB per tripling of the songs), augmentation as extra diversity, and the loss/mask design.
 Lesson: copy the batch log (`/workspace/batch6-*.log`) off the pod, or into `/workspace/runs/`, before the pod ends; the epoch curves live only there.
+
+## Arms aug and w (next): what do the old recipe's pieces do on the clean base?
+Two arms on all 100 songs, small network (0.27 M), 10,000 steps, seed 0, each one change from `n100-clean`:
+- **`n100-aug`** (`configs/runpod-b6-aug.yaml`): effects on, random stem gains -12..+6 dB, 5% dropped stems; no tempo/pitch (as on the pod before). Equal source weights. Validation and scoring stay on clean mixes.
+- **`n100-w`** (`configs/runpod-b6-w.yaml`): `source_weights` vocals x4, `present_weights` keys x4 (where audible). No augmentation.
+Not run: aug and w together (the old recipe), a second seed, the 1.9 M network.
+Run: `ARMS="100:aug 100:w" HOURS_PER_RUN=1.5 AUTO_STOP=1 nohup bash scripts/runpod_batch6.sh > /workspace/batch6-aw.log 2>&1 &` (whole line, with the redirect). Estimate (not measured): the augmentation renders effects, so `aug` may be slower than the 12 min of a clean arm (guess 15-25 min); `w` about 12 min; scoring 5 min each; about 45 min, about $0.5.
+Before the pod ends: copy `/workspace/batch6-aw.log` (the epoch curves live only there) and the score files; with `AUTO_STOP=1` the pod stops after the bundle, so copy the log into `/workspace/runs/` straight after the last arm, or run the last arm without it.
+Check the time after the first epoch of `aug`: over 3 min per epoch, stop and think.
+
+### Decision rules (fixed before the run)
+Reference: `n100-clean`, Fit 8.8, Test 8.1 (mean of drums, bass, vocals, scored on the same 240 clean windows; two seeds agreed within 0.1). A difference of 0.5 dB or more on the scored means is read as real, below that as none; 1.0 dB or more as clearly real.
+**aug** (the question: does augmentation help generalisation? Fit is expected to fall, since the training mix is harder than the clean windows it is scored on):
+1. Test at least +0.5 over `n100-clean` (8.6 or more): augmentation helps the test score. Keep it in the recipe; a lower Fit does not matter then. Next: aug with the 1.9 M network, and as the base for added data.
+2. Test within 0.5 of `n100-clean` (7.6 to 8.6): no gain at this budget. If Fit also fell by 1.0 or more, leave it out for now (it costs fit and buys nothing); if Fit is unchanged, it is harmless and stays an option for later and larger runs.
+3. Test at least 0.5 below (7.6 or less): the augmentation hurts here; D's 6.1 was partly paid for by it. Leave it out; weaken it (smaller gain range, fewer effects) in a follow-up only if there is a reason to.
+**w** (the question: do the weights fix keys without costing the audible sources?):
+4. Keys on Test: the collapse counts as fixed if keys is above 0 dB (clean: -11 to -15, 52 windows, noisy, so only a jump of several dB counts). Drums, bass and vocals mean on Test:
+   - keys fixed and the mean within 0.5 of `n100-clean` (7.6 or more): keep the weights. Next: the weights in the recipe from now on.
+   - keys fixed but the mean down by 1.0 or more: the weights buy keys at the price of the audible sources. Soften them (vocals x2, keys x2) in a follow-up, or gate instead (the recogniser).
+   - keys not fixed (still below 0): the weights do not do here what they did in batch 1; check with the keys Fit and the training curve before using them.
+   - mean down 0.5 to 1.0: grey; read vocals alone (x4 weight, expected to rise or stay) and the curve.
+**Together:** the next recipe takes what rules 1-4 keep (augmentation if rule 1, weights if rule 4 says keep); if both are kept, one run with both on the clean base (the old recipe minus the studio songs) shows whether they add up, before anything bigger is built on it. If neither is kept, the next lever is data (Slakh, studio songs) or the loss and mask design, on the clean recipe.
+Not decided here: guitar and keys beyond the keys check of rule 4 (too few windows); the studio songs, Slakh; any size above 1.9 M.
+Limits: one seed per arm (seed noise on the means about 0.1 dB for the clean arm, unknown for these); Fit and Test measured on clean windows, so augmentation is not scored on what it trains on; the clean base has no studio songs, so this is not a repeat of D.
