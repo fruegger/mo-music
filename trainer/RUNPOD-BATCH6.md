@@ -56,7 +56,7 @@ per song; guitar and keys are too noisy to decide anything; ten thousand steps m
 
 ## Results so far (2026-11-15, RTX PRO 4000 Blackwell, $0.6/h; mean of drums / bass / vocals, SI-SDR improvement in dB)
 Time: 12 min training per arm (about 15 min with scoring), a lot faster than the estimate above. Seed 1 of `n100-clean` trained to the same validation curve as seed 0 (7.54 vs 7.52, the two curves within 0.02 dB);
-its score files were not read yet (the pod stopped itself after scoring; they are on the volume in `/workspace/runs/b6-n100-clean-s1/`).
+its scores: Fit 8.5 / 8.7 / 9.3 (mean 8.83), Test 7.6 / 8.0 / 8.8 (mean 8.13), against seed 0 Fit 8.83, Test 8.07: seed noise on the scored means is about 0.1 dB, not the 1 dB assumed in the rules. Rule 1 therefore stays in the grey zone for good (Fit 8.8 on both seeds), and the ladder and curve reading below decides: go to arm I.
 
 | arm | Fit (own songs) | Test (50 songs) | gap |
 |---|---|---|---|
@@ -79,7 +79,7 @@ Estimate (not measured): batch 5 took 47 min for I against about 25 min for D on
 Check the time after the first epoch: over 3 min per epoch, stop and think.
 
 ### Decision rules for I (fixed before the run)
-Reference: `n100-clean` (Fit 8.8, Test 8.1; take the mean of the two seeds once the seed-1 scores are read). Seed noise on the validation curve is tiny (0.02 dB), on the scored numbers probably a few tenths; 1.0 dB is treated as a real difference, 0.5 to 1.0 as grey.
+Reference: `n100-clean` (Fit 8.8, Test 8.1, the same on both seeds). Seed noise is about 0.1 dB on the scored means; the thresholds below (1.0 dB real, 0.5 to 1.0 grey) are kept on purpose, since arm I differs in more than a seed.
 1. **Capacity limits the fit:** Fit of `n100-i` at least 1.0 dB above `n100-clean`.
    - and Test also at least 1.0 dB above: capacity is a lever in the clean recipe. Next: L (`base_channels` 48, depth 4, 17.5 M, from batch 5) on `n100-clean`, to see if size keeps helping; then the added data (Slakh, studio) with the bigger network.
    - Fit up but Test not (less than 0.5 dB): the bigger network memorises the 100 songs; more data or augmentation is needed before size helps (then `n100-aug` with I).
