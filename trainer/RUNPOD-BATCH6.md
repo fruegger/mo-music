@@ -53,3 +53,39 @@ Seed noise is about 1 dB per number on one seed, a bit less on a mean of three s
 
 Limits: one seed per arm; a clean recipe without the studio songs is not the recipe that produced batches 1-5; Fit is measured on the songs trained on (memorisation counts), Test on 50 songs and 240 windows; the Fit of `n3` and `n100` rests on different numbers of windows
 per song; guitar and keys are too noisy to decide anything; ten thousand steps may be too few for the larger subsets to reach their limit (read the training curve).
+
+## Results so far (2026-11-15, RTX PRO 4000 Blackwell, $0.6/h; mean of drums / bass / vocals, SI-SDR improvement in dB)
+Time: 12 min training per arm (about 15 min with scoring), a lot faster than the estimate above. Seed 1 of `n100-clean` trained to the same validation curve as seed 0 (7.54 vs 7.52, the two curves within 0.02 dB);
+its score files were not read yet (the pod stopped itself after scoring; they are on the volume in `/workspace/runs/b6-n100-clean-s1/`).
+
+| arm | Fit (own songs) | Test (50 songs) | gap |
+|---|---|---|---|
+| n3-clean (laptop, 1,500 steps) | 10.5 | - | |
+| n10-clean | 11.0 | 5.8 | 5.1 |
+| n30-clean | 10.3 | 7.1 | 3.3 |
+| n100-clean seed 0 | 8.8 | 8.1 | 0.7 |
+Reference D (old recipe, studio + augmentation + weights): Fit 6.5, Test 6.1; oracle on the test windows about 13.4.
+
+Reading: rule 3 passes (Test 8.1 vs D 6.1, +2.0): the clean recipe replaces the old one. Rule 1 stays in the grey zone (Fit 8.8, between 7.5 and 9.0), but the ladder is not a steady fall: 10 -> 30 songs costs 0.7 dB of Fit, 30 -> 100 costs 1.5 dB, so the 0.27 M network's budget starts to bind between 30 and 100 songs.
+Test still rises by about 1 dB per tripling of the songs (more data helps). The n100 validation curve is flat from about epoch 12 (the last 10 epochs add about 0.15 dB; the learning rate decays to 5% over the run, so this partly reflects the schedule), so more steps alone (J) is not the first thing to try.
+Keys (equal weight, 11-52 windows) slides steadily downward during training (-2.5 to -12 on validation): the old keys collapse, not decided here.
+
+## Arm I (next): does a larger network fit the 100 songs?
+Config `configs/runpod-b6-i.yaml` = `runpod-b6-clean.yaml` with `base_channels` 32 (depth 3, 1.9 M parameters, the network of batch 5 arm I); everything else the same: MUSDB18 only, no augmentation, equal weights, 10,000 steps of batch 8 x 3 s, lr 0.002, seed 0.
+Run (arm name `n100-i`, results in `/workspace/runs/b6-n100-i-s0`), same scoring as before (Fit on the 100 training songs, Test on the 50 test songs, same 240 windows as every other arm, so the numbers compare directly):
+`ARMS="100:i" HOURS_PER_RUN=1.5 AUTO_STOP=1 nohup bash scripts/runpod_batch6.sh > /workspace/batch6-i.log 2>&1 &`   (spell out the whole line including the log redirect; a cut line sends the output to `nohup.out`)
+Estimate (not measured): batch 5 took 47 min for I against about 25 min for D on its GPU, so about 2x D's 12 min here: about 25 min plus scoring, about $0.3.
+`AUTO_STOP=1` stops the pod after the scoring; the files stay on the volume. Read the scores first if you want them at once.
+Check the time after the first epoch: over 3 min per epoch, stop and think.
+
+### Decision rules for I (fixed before the run)
+Reference: `n100-clean` (Fit 8.8, Test 8.1; take the mean of the two seeds once the seed-1 scores are read). Seed noise on the validation curve is tiny (0.02 dB), on the scored numbers probably a few tenths; 1.0 dB is treated as a real difference, 0.5 to 1.0 as grey.
+1. **Capacity limits the fit:** Fit of `n100-i` at least 1.0 dB above `n100-clean`.
+   - and Test also at least 1.0 dB above: capacity is a lever in the clean recipe. Next: L (`base_channels` 48, depth 4, 17.5 M, from batch 5) on `n100-clean`, to see if size keeps helping; then the added data (Slakh, studio) with the bigger network.
+   - Fit up but Test not (less than 0.5 dB): the bigger network memorises the 100 songs; more data or augmentation is needed before size helps (then `n100-aug` with I).
+2. **Capacity is not the limit:** Fit less than 0.5 dB above `n100-clean`. Then the limit is not parameters: batch 5 already found size flat with the old recipe, this repeats it for the clean one. Look at optimisation and the data side (learning rate, the loss, the masks/STFT resolution, `n100-aug` and `n100-w` from the original plan) rather than size.
+3. **Grey (0.5 to 1.0 dB on Fit):** read the validation curve (still rising at step 10,000 for I: run I at 30,000 steps, the J arm on I); otherwise treat as rule 2 with a note.
+4. **Keys:** not decided here (noisy); only noted, and compared with the `n100-clean` slide.
+Not decided here: the remaining arms of the original plan (`n100-aug`, `n100-w`) and Slakh or studio songs; those wait for this result.
+
+Limits: one seed; Fit measured on songs trained on; the 1.9 M network is 7x larger, so it also takes about 2x longer per step; batch 5 results (size flat) were measured with the old recipe and studio songs, so this is a real new test, not a repeat.
