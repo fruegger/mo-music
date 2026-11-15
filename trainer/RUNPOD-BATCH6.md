@@ -14,6 +14,11 @@ So the network can learn the task; something about the whole task stops it. Cand
 | `n100-aug` | all 100 | clean + augmentation (effects, stem gains -12..+6 dB, 5% dropped stems; no tempo/pitch, as on the pod before) | does the augmentation stop the fit? |
 | `n100-w` | all 100 | clean + source weights (vocals x4, keys x4 where audible) | do the weights stop the fit? |
 
+**Run order (conditional, decided 2026-11-15):** the arms are not run as one block. `n100-clean` goes first and alone (`ARMS="100:clean"`, `AUTO_STOP` off, so the pod stays up while we read it); the rest follows from rule 1:
+- Fit at least 9.0: run `100:aug 100:w`. The ladder (`3`, `10`, `30`) and the sanity arm are skipped: a good fit cannot come from a pod-setup bug.
+- Fit at most 7.5: run `3:clean` first (sanity: bug or real limit), then `10:clean` and `30:clean` for the ladder.
+- Grey (7.5-9.0): run `3:clean`, `10:clean`, `30:clean` and `100:clean` with `SEEDS="1"`.
+
 "Clean" = `configs/runpod-b6-clean.yaml`: no augmentation, equal source weights. Subsets are nested (each contains the smaller ones; the first three are the overfit songs, then a seeded shuffle, `scripts/make_song_subsets.py`).
 The studio songs are left out on purpose (D had them at weight 0.25), so these arms are not comparable with batches 1-5 except through the same scoring (see below). Not run here: the combination aug + weights (that is the old recipe), a second seed
 (only for an arm the rules put in the grey zone), the larger networks (they come after this, with the recipe this batch finds).
@@ -28,9 +33,9 @@ References from the same script and windows: D (batch 2, with studio, augmentati
 ## Data on the pod, cost
 Same idea as batch 5: the master copy of `MUSDB18_prepared` (4.7 GB) on a network volume, copied once to the pod's local disk (`/root/data`; the runner refuses with under 15 GB free), subsets as symlinks, results on the volume (`/workspace/runs/b6-*`, bundle
 `/workspace/batch6-results.tar.gz` with `run.json`, `model.pt` and the two score files per arm). The batch 5 volume may be gone: a **20 GB network volume** is enough (about $0.05 a day); one-time setup about 15 min (pod on the volume,
-`bash scripts/runpod_setup.sh data-musdb`, Python 3.11 venv on `/workspace/venv`, activate it); the studio upload of batch 5 is not needed. Run: `HOURS_PER_RUN=1.5 AUTO_STOP=1 nohup bash scripts/runpod_batch6.sh > /workspace/batch6.log 2>&1 &`.
-Estimate (not measured): the small network took about 1.3 min per epoch of 500 steps on the RTX 2000 Ada of batch 5 (26 min per run), clean arms render faster, so about 25-30 min per arm, six arms about 3 h, scoring about 5 min per arm, about 3.5 h in all; roughly $2-3 at $0.7/h.
-**After the first epoch of `n3-clean`, check the time: over 3 min per epoch (1 h per run), stop and think.**
+`bash scripts/runpod_setup.sh data-musdb`, Python 3.11 venv on `/workspace/venv`, activate it); the studio upload of batch 5 is not needed. Run, step 1: `ARMS="100:clean" HOURS_PER_RUN=1.5 nohup bash scripts/runpod_batch6.sh > /workspace/batch6.log 2>&1 &` (no `AUTO_STOP`; the pod idles at about $0.7/h while we read the result). Later steps: the same with the `ARMS` of the rule that applies, `AUTO_STOP=1` on the last one.
+Estimate (not measured): the small network took about 1.3 min per epoch of 500 steps on the RTX 2000 Ada of batch 5 (26 min per run), clean arms render faster, so about 25-30 min per arm plus about 5 min scoring. Best case (fit at least 9.0): `n100-clean`, `n100-aug`, `n100-w`, about 1.5-2 h in all with setup, roughly $1-1.5. Worst case (all six arms, a seed-1 rerun not counted): about 3.5 h, $2-3 at $0.7/h.
+**After the first epoch of `n100-clean`, check the time: over 3 min per epoch (1 h per run), stop and think.**
 
 ## Decision rules (fixed before the run)
 Seed noise is about 1 dB per number on one seed, a bit less on a mean of three sources; 1.5 dB is treated as a real difference, 0.5-1.5 dB as grey.
@@ -43,7 +48,7 @@ Seed noise is about 1 dB per number on one seed, a bit less on a mean of three s
    and the studio mix are the next suspects; a culprit: soften or remove it (weaker augmentation, smaller weights) in a follow-up batch, one change at a time again.
 3. **Does the clean recipe also generalise?** Test of `n100-clean` against D's 6.1: at least +1.5 dB better means the old recipe's augmentation, weights or studio mix cost the real test score and the clean recipe replaces it; within 1 dB means they were not the lever for the test score
    (augmentation is expected to help the test score a little: compare Test of `n100-aug` with `n100-clean`).
-4. **Sanity:** `n3-clean` should reach at least +10 on its own songs (the laptop did in 1,500 steps); if it does not, something in the pod setup differs from the laptop and the other arms are not trusted until that is understood.
+4. **Sanity (only run when `n100-clean` fits at 9.0 or below):** `n3-clean` should reach at least +10 on its own songs (the laptop did in 1,500 steps); if it does not, something in the pod setup differs from the laptop and the other arms are not trusted until that is understood. A Fit of at least 9.0 on `n100-clean` already shows the setup works, so the sanity arm is skipped then.
 5. Not decided here: whether to bring Slakh back or add songs; that waits for this batch.
 
 Limits: one seed per arm; a clean recipe without the studio songs is not the recipe that produced batches 1-5; Fit is measured on the songs trained on (memorisation counts), Test on 50 songs and 240 windows; the Fit of `n3` and `n100` rests on different numbers of windows

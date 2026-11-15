@@ -18,7 +18,7 @@ cd "$(dirname "$0")/.."
 MASTER="${MASTER:-/workspace}"
 LOCAL="${LOCAL:-/root/data}"
 CFG="${CFG:-/root/b6cfg}"
-ARMS="${ARMS:-3:clean 10:clean 30:clean 100:clean 100:aug 100:w}"
+ARMS="${ARMS:-100:clean}"   # step 1 only; the later arms depend on its result (RUNPOD-BATCH6.md, "Run order"): 100:aug 100:w | 3:clean 10:clean 30:clean
 SEEDS="${SEEDS:-0}"
 FIRST=("Actions - Devil's Words" "BigTroubles - Phantom" "ANiMAL - Clinic A")   # the three songs of the laptop overfit test
 SIZES="${SIZES:-3 10 30 100}"
