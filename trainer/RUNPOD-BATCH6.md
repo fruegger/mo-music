@@ -89,3 +89,10 @@ Reference: `n100-clean` (Fit 8.8, Test 8.1, the same on both seeds). Seed noise 
 Not decided here: the remaining arms of the original plan (`n100-aug`, `n100-w`) and Slakh or studio songs; those wait for this result.
 
 Limits: one seed; Fit measured on songs trained on; the 1.9 M network is 7x larger, so it also takes about 2x longer per step; batch 5 results (size flat) were measured with the old recipe and studio songs, so this is a real new test, not a repeat.
+
+## Result of arm I (2026-11-15, 22 min training, about $0.3)
+`n100-i` (1.9 M, clean, 100 songs, seed 0): Fit 9.2 / 9.5 / 10.2 (mean 9.63), Test 7.9 / 8.3 / 9.4 (mean 8.53); guitar Fit 5.5, Test 4.3; keys Fit -8.3, Test -11.1 (noise).
+Against `n100-clean` (Fit 8.8, Test 8.1): **Fit +0.8, Test +0.4**; the Fit/Test gap grows from 0.7 to 1.1.
+Rule 3 (grey, +0.5 to +1.0 on Fit): the validation curve was not read (the pod was terminated before the log was copied), so the "still rising" check for the 30,000-step arm is open. Treated as rule 2: 7x the parameters bought +0.8 dB of Fit and +0.4 dB of Test, the same small size effect as batch 5 (I +0.6, L +0.1), now confirmed in the clean recipe. Size is not the main lever.
+L (17.5 M) is not run: the gain per parameter is too small. The remaining levers are the data (Test rises about 1 dB per tripling of the songs), augmentation as extra diversity, and the loss/mask design.
+Lesson: copy the batch log (`/workspace/batch6-*.log`) off the pod, or into `/workspace/runs/`, before the pod ends; the epoch curves live only there.
