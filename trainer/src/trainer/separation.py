@@ -145,8 +145,8 @@ def separation_loss(estimates: torch.Tensor, sources: torch.Tensor, mask: torch.
                     loss_type: str = "l1", mix_rms: torch.Tensor | None = None) -> torch.Tensor:
     """L1 on the waveforms, averaged over the sources whose target is known.
     `loss_type` changes the per-source error: `"l1"` (default, as above); `"norm_l1"`: the L1 divided by the source's own
-    RMS plus 0.1 x the mixture's RMS `mix_rms` `(batch,)` (a relative error, so a quiet source counts like a loud one;
-    the mixture term keeps a silent source finite), times 0.1 to stay near the scale of the plain L1; `"sisdr"`: for the
+    RMS plus 0.1 x the mixture's RMS `mix_rms` `(batch,)` plus 1e-4 (a relative error, so a quiet source counts like a loud one;
+    the mixture term keeps a silent source finite and the constant a digitally silent snippet, where everything is 0), times 0.1 to stay near the scale of the plain L1; `"sisdr"`: for the
     sources that are audible (above -50 dB) the negative SI-SDR in dB (clamped to +-30) times 0.01, for the others the
     plain L1 (so a silent source is still pushed to silence). The group term below stays L1 in every mode.
     A silent source is a valid target (the model should output silence). A leak into a silent source is a small
@@ -163,7 +163,7 @@ def separation_loss(estimates: torch.Tensor, sources: torch.Tensor, mask: torch.
     weight = mask
     level = 10.0 * torch.log10((sources**2).mean(dim=(-1, -2)) + 1e-12)  # (batch, sources)
     if loss_type == "norm_l1":
-        per_source = 0.1 * per_source / ((sources**2).mean(dim=(-1, -2)).sqrt() + 0.1 * mix_rms[:, None])
+        per_source = 0.1 * per_source / ((sources**2).mean(dim=(-1, -2)).sqrt() + 0.1 * mix_rms[:, None] + 1e-4)
     elif loss_type == "sisdr":
         per_source = torch.where(level > -50.0, -0.01 * si_sdr(estimates, sources).clamp(-30.0, 30.0), per_source)
     elif loss_type != "l1":
