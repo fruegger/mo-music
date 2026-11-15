@@ -53,3 +53,12 @@ Fit is measured on the songs trained on, Test on 50 songs and 240 windows; the l
 ## Results so far (2026-11-15; mean of drums / bass / vocals; reference `n100-clean` Fit 8.8, Test 8.1)
 - **sisdr** (12 min): Fit 9.3 / 9.3 / 10.2 (mean 9.6), Test 7.7 / 8.2 / 9.4 (mean 8.4): +0.8 / +0.3, grey by rule 1 (a lever needs +1.0 and +0.5), no source worse. **Keys: Fit +6.4, Test +3.6, validation about +6 from epoch 0** (every earlier arm was negative: clean -11 to -15, weights -5.4), with equal weights. Plausible reason: L1 on the waveform is median-like and switches off a source that is silent in most items; SI-SDR on audible sources does not. Keys rests on 37 / 52 windows (the rules say not to decide on it), but the jump is 15-18 dB. Next: seed 1 (grey rule), silent-source leakage check, then sisdr + weights / 1.9 M.
 - **norm**: NaN from epoch 0 (all scores NaN): a bug, not a result. Digitally silent MUSDB snippets have a zero mixture and zero sources, so the denominator (source RMS + 0.1 x mixture RMS) was 0 and 0/0 = NaN. Fixed with a 1e-4 floor in `separation_loss`, with `tests/test_loss_modes.py` (the test fails on the old code). The arm must be rerun: `ARMS="100:norm" bash scripts/runpod_batch7.sh` after `git pull`.
+
+## Results of the other arms (2026-11-15; mean of drums / bass / vocals; reference `n100-clean` Fit 8.8, Test 8.1; 12 min of training per arm on the RTX PRO 4000, 23 min for `norm` on a slower pod)
+| arm | Fit | Test | keys Fit / Test | rule |
+|---|---|---|---|---|
+| ctx (1.72 M) | 8.9 (8.5 / 8.6 / 9.5) | 8.0 (7.6 / 7.9 / 8.4) | -12.6 / -13.3 | rule 3: within 0.5 of clean and below arm I (Fit 9.6): the field of view is not the limit; dropped. Validation vocals fall from 7.2 (epoch 4) to 6.5 |
+| lrlow (0.001) | 8.9 (8.5 / 8.8 / 9.4) | 8.1 (7.5 / 8.0 / 8.7) | -14.7 / -14.6 | rule 4: flat |
+| lrhigh (0.004) | 8.9 (8.5 / 8.7 / 9.4) | 8.0 (7.5 / 7.9 / 8.7) | -15.2 / -14.8 | rule 4: flat; no divergence. The learning rate is not a lever, 0.002 stays |
+| norm (rerun after the fix) | 6.5 (6.7 / 6.7 / 6.2) | not read | -10.5 / - | rule 1: harmful (-2.3 on Fit), dropped. Validation vocals end at 4.5 (clean 8.1): a loss that divides by the source's own level over-weights near-silent windows (a guess, not tested) |
+Open: the `sisdr` seed-1 check (grey on the mean, keys +6.4 / +3.6), the silent-source leakage check, then `sisdr` with the source weights and on the 1.9 M network.
