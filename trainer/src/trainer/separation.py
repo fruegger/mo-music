@@ -18,23 +18,50 @@ def conv_block(cin: int, cout: int) -> nn.Sequential:
     )
 
 
+class FrequencyContext(nn.Module):
+    """Whole-spectrum, whole-snippet context at the bottleneck. The 3x3 convolutions of the U-Net see only a local
+    patch (a few kHz, a couple of seconds); this reduces the channels, lays the frequency axis out as features and runs
+    a bidirectional LSTM along time (like Open-Unmix), so every bin can depend on the whole spectrum and the whole
+    snippet. A residual connection keeps the U-Net path as it is."""
+
+    def __init__(self, channels: int, freq: int, reduce: int = 8, hidden: int = 128):
+        super().__init__()
+        self.reduce_channels = reduce
+        self.reduce = nn.Conv2d(channels, reduce, 1)
+        self.lstm = nn.LSTM(reduce * freq, hidden, batch_first=True, bidirectional=True)
+        self.expand = nn.Linear(2 * hidden, reduce * freq)
+        self.restore = nn.Conv2d(reduce, channels, 1)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        b, _, f, t = x.shape
+        y = self.reduce(x).permute(0, 3, 1, 2).reshape(b, t, -1)  # (batch, time, reduce * freq)
+        y, _ = self.lstm(y)
+        y = self.expand(y).reshape(b, t, self.reduce_channels, f).permute(0, 2, 3, 1)
+        return x + self.restore(y)
+
+
 class SeparationNet(nn.Module):
     """`(batch, channels, freq, time)` magnitudes -> `(batch, sources, channels, freq, time)` masks in [0, 1].
 
     `mask` is `"sigmoid"` (each source's mask on its own) or `"softmax"` (the masks of the sources add up to 1
     in every time-frequency bin, so the estimates add up to the mixture).
-    `freq` and `time` must be divisible by `2 ** depth` (the `Separator` pads)."""
+    `freq` and `time` must be divisible by `2 ** depth` (the `Separator` pads).
+    `context="lstm"` adds a `FrequencyContext` at the bottleneck (needs `freq`, the number of input bins)."""
 
-    def __init__(self, n_sources: int, n_channels: int = 2, base: int = 16, depth: int = 3, mask: str = "softmax"):
+    def __init__(self, n_sources: int, n_channels: int = 2, base: int = 16, depth: int = 3, mask: str = "softmax",
+                 context: str = "none", freq: int = 1024, context_reduce: int = 8, context_hidden: int = 128):
         super().__init__()
         if mask not in ("sigmoid", "softmax"):
             raise ValueError(f"mask must be 'sigmoid' or 'softmax', not {mask!r}")
+        if context not in ("none", "lstm"):
+            raise ValueError(f"context must be 'none' or 'lstm', not {context!r}")
         self.n_sources, self.n_channels, self.depth, self.mask = n_sources, n_channels, depth, mask
         widths = [base * 2**i for i in range(depth + 1)]
         self.down = nn.ModuleList([conv_block(n_channels if i == 0 else widths[i - 1], widths[i]) for i in range(depth + 1)])
         self.up = nn.ModuleList([nn.ConvTranspose2d(widths[i + 1], widths[i], 2, stride=2) for i in range(depth)])
         self.merge = nn.ModuleList([conv_block(2 * widths[i], widths[i]) for i in range(depth)])
         self.head = nn.Conv2d(widths[0], n_sources * n_channels, 1)
+        self.context = FrequencyContext(widths[depth], freq // 2**depth, context_reduce, context_hidden) if context == "lstm" else None
 
     def forward(self, magnitude: torch.Tensor) -> torch.Tensor:
         x = torch.log1p(100.0 * magnitude)
@@ -43,6 +70,8 @@ class SeparationNet(nn.Module):
             x = block(x if i == 0 else F.max_pool2d(x, 2))
             skips.append(x)
         x = skips.pop()
+        if self.context is not None:
+            x = self.context(x)
         for i in reversed(range(self.depth)):
             x = self.merge[i](torch.cat([self.up[i](x), skips[i]], dim=1))
         logits = self.head(x)
@@ -71,9 +100,9 @@ class Separator(nn.Module):
     sources are removed and, for softmax masks, the others renormalised (see `gate_masks`)."""
 
     def __init__(self, n_sources: int, n_channels: int = 2, n_fft: int = 2048, hop: int = 512, base: int = 16, depth: int = 3,
-                 mask: str = "softmax"):
+                 mask: str = "softmax", context: str = "none", context_reduce: int = 8, context_hidden: int = 128):
         super().__init__()
-        self.net = SeparationNet(n_sources, n_channels, base, depth, mask)
+        self.net = SeparationNet(n_sources, n_channels, base, depth, mask, context, n_fft // 2, context_reduce, context_hidden)
         self.n_fft, self.hop, self.depth = n_fft, hop, depth
         self.register_buffer("window", torch.hann_window(n_fft), persistent=False)
 
@@ -112,8 +141,14 @@ class Separator(nn.Module):
 def separation_loss(estimates: torch.Tensor, sources: torch.Tensor, mask: torch.Tensor,
                     group_target: torch.Tensor | None = None, group_mask: torch.Tensor | None = None,
                     silent_weight: float = 1.0, silent_db: float = -60.0,
-                    present_weights: torch.Tensor | None = None, present_db: float = -50.0) -> torch.Tensor:
+                    present_weights: torch.Tensor | None = None, present_db: float = -50.0,
+                    loss_type: str = "l1", mix_rms: torch.Tensor | None = None) -> torch.Tensor:
     """L1 on the waveforms, averaged over the sources whose target is known.
+    `loss_type` changes the per-source error: `"l1"` (default, as above); `"norm_l1"`: the L1 divided by the source's own
+    RMS plus 0.1 x the mixture's RMS `mix_rms` `(batch,)` (a relative error, so a quiet source counts like a loud one;
+    the mixture term keeps a silent source finite), times 0.1 to stay near the scale of the plain L1; `"sisdr"`: for the
+    sources that are audible (above -50 dB) the negative SI-SDR in dB (clamped to +-30) times 0.01, for the others the
+    plain L1 (so a silent source is still pushed to silence). The group term below stays L1 in every mode.
     A silent source is a valid target (the model should output silence). A leak into a silent source is a small
     error in absolute terms and L1 barely feels it, so with `silent_weight` > 1 the error of every source whose
     target is below `silent_db` (RMS, dB) counts that many times as much (the average is still divided by the number
@@ -127,6 +162,12 @@ def separation_loss(estimates: torch.Tensor, sources: torch.Tensor, mask: torch.
     per_source = (estimates - sources).abs().mean(dim=(-1, -2))  # (batch, sources)
     weight = mask
     level = 10.0 * torch.log10((sources**2).mean(dim=(-1, -2)) + 1e-12)  # (batch, sources)
+    if loss_type == "norm_l1":
+        per_source = 0.1 * per_source / ((sources**2).mean(dim=(-1, -2)).sqrt() + 0.1 * mix_rms[:, None])
+    elif loss_type == "sisdr":
+        per_source = torch.where(level > -50.0, -0.01 * si_sdr(estimates, sources).clamp(-30.0, 30.0), per_source)
+    elif loss_type != "l1":
+        raise ValueError(f"loss_type must be 'l1', 'norm_l1' or 'sisdr', not {loss_type!r}")
     if silent_weight != 1.0:
         silent = (level < silent_db).to(mask.dtype)
         weight = weight * (1.0 + (silent_weight - 1.0) * silent)

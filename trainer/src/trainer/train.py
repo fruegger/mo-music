@@ -298,14 +298,17 @@ class SeparationTask:
 
     def build(self) -> nn.Module:
         s = self.sep
-        return Separator(len(source_names(s["source_set"])), 2, s["n_fft"], s["hop"], s["base_channels"], s["depth"], s["mask"])
+        return Separator(len(source_names(s["source_set"])), 2, s["n_fft"], s["hop"], s["base_channels"], s["depth"], s["mask"],
+                         s.get("context", "none"), int(s.get("context_reduce", 8)), int(s.get("context_hidden", 128)))
 
     def loss(self, model, batch, device):
         estimates = model(batch["mix"].to(device))
         mask = batch["sources_mask"].to(device) * self.source_weights.to(device)
         group = (batch["group_target"].to(device), batch["group_mask"].to(device)) if "group_mask" in batch else (None, None)
+        mix = batch["mix"].to(device)
         return separation_loss(estimates, batch["sources"].to(device), mask, *group, silent_weight=float(self.sep.get("silent_weight", 1.0)),
-                               present_weights=None if self.present_weights is None else self.present_weights.to(device))
+                               present_weights=None if self.present_weights is None else self.present_weights.to(device),
+                               loss_type=self.sep.get("loss", "l1"), mix_rms=(mix**2).mean(dim=(-1, -2)).sqrt())
 
     def evaluate(self, model, loader, device) -> dict:
         scores = evaluate_separation(model, loader, device)

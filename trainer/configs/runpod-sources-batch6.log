@@ -1,0 +1,2 @@
+name | load url | local path | date | license
+MUSDB18-prepared | derived from MUSDB18 (https://zenodo.org/records/1117372) with `mixer prepare-musdb`; subset of the train songs + all test songs, symlinks into the pods local copy made by runpod_batch6.sh and runpod_batch7.sh | /root/data/b6/n100 | 10.11.2026 | !! NON COMMERCIAL
