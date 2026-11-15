@@ -38,3 +38,27 @@ Seed noise is about 0.1 dB on the scored means (batch 7: two seeds of `sisdr` ag
 Not decided here: guitar (leaks in every model; a guess is that `other` is almost always off), a second seed (only for an arm the rules put on a boundary), the data side, augmentation, combining the two arms (only if both pass their rules: one run with silent_weight 10 on the 1.9 M network).
 
 Limits: one seed per arm; the leakage rests on few windows for drums, bass, keys and guitar (vocals on MUSDB18 and the studio songs are solid, n 128 and 62); `silent_weight` multiplies the L1 term of the silent sources only, it cannot move audible-source scores except through the shared network; the 6 s windows of the check are clean mixes.
+
+## Results (2026-11-15; mean of drums / bass / vocals; reference `n100-sisdr` Fit 9.63, Test 8.43, keys +6.4 / +3.7)
+| arm | time | Fit | Test | keys Fit / Test | rule |
+|---|---|---|---|---|---|
+| sisdr_i (1.9 M) | 23 min | **10.4** (10.1 / 10.1 / 11.1) | **8.9** (8.1 / 8.5 / 10.0) | +7.4 / +3.6 | rule 5: stacks (Fit >= 10.1, Test >= 8.7), keys held; its vocal leakage is 3-4 dB **lower** than sisdr (below), so it becomes the base |
+| sisdr_sw10 | 13 min | 8.7 (8.6 / 8.5 / 9.0) | 7.9 (7.5 / 7.8 / 8.4) | +5.1 / +3.4 | rule 1 fails on the scores (Fit 8.7 < 9.1, Test 7.9 < 8.1); leakage down by 5.8 / 11 dB: **rule 2, a trade** (weight too strong) |
+The gains of size and of the loss are additive: size gives +0.8 Fit / +0.4 Test over L1 (batch 6) and +0.8 / +0.44 over sisdr. Against the clean-L1 base: Fit +1.6, Test +0.8; the test oracle is about 13.4. The Fit/Test gap grows (0.7 clean, 1.2 sisdr, 1.6 sisdr_i): the first sign of a gap that regularisation could work on.
+The sisdr_sw10 validation curve ends with vocals at 8.0 (sisdr 9.0) and guitar below 0.
+
+Leakage into silent sources (`scripts/silent_leakage.py`, dB re the mixture, lower is better; SISDR = batch 7 seeds 0 and 1):
+| source | MUSDB18 SISDR / sisdr_i / sw10 | studio SISDR / sisdr_i / sw10 |
+|---|---|---|
+| vocals | -23.5 / -26.4 / **-29.3** (n 128) | -26.5 / -30.4 / **-37.6** (n 62) |
+| bass | -23.3 / -24.0 / -23.6 (n 91) | -29.3 / -28.6 / -29.9 (n 7) |
+| drums | -24.9 / -26.4 / -23.4 (n 43) | n 1 |
+| guitar | -11.4 / -10.3 / -15.5 (n 133) | -1.0 / -0.7 / -1.1 (n 7) |
+| keys | -48.1 / -52.3 / -71.7 (n 183) | -48.5 / -52.1 / -74.6 (n 6) |
+| other | -89.6 / -93.0 / -97.8 | -88.8 / -91.2 / -96.1 |
+For reference the L1 models had vocals -29.0 (MUSDB18) / -38.8 (studio). `silent_weight` 10 brings the vocal bleed back to the L1 level but costs 0.9 Fit and 0.5 Test; the 1.9 M network cuts it by 3-4 dB for free.
+
+## Conclusion of batch 8 and next
+- Base from now on: `sisdr` loss + the 1.9 M network (`n100-sisdr_i`: Fit 10.4, Test 8.9, keys +7.4 / +3.6), one seed so far.
+- `silent_weight` between 1 and 10: 10 is too strong on the 0.27 M net; next arm `silent_weight` 3 on the 1.9 M network (rule 2), plus a seed-1 rerun of `sisdr_i` (it is the base now and rests on one seed).
+- Then: the data side (Slakh keys and the studio songs, now that keys no longer collapses), and gentler augmentation, since a Fit/Test gap has started to open.
