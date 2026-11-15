@@ -58,6 +58,8 @@ def main() -> None:
     ap.add_argument("--tags", type=Path)
     ap.add_argument("--promote-single", action="store_true")
     ap.add_argument("--runs", nargs="*", default=[], help="NAME=run folder")
+    ap.add_argument("--n-fft", type=int, default=2048, help="STFT size of the ORACLE (the runs use their own)")
+    ap.add_argument("--hop", type=int, default=1024, help="STFT hop of the ORACLE (the runs use their own)")
     args = ap.parse_args()
 
     ds = load_registry(args.sources)[args.dataset.lower()]
@@ -67,14 +69,14 @@ def main() -> None:
     if args.tags:
         kwargs = {"source_tags": load_other_tags(args.tags, "musdb6"), "promote_single": args.promote_single}
     data = SnippetDataset(tracks, mix_cfg, args.snippets, 1_000_000, tasks=("separation",), source_set="musdb6", **kwargs)
-    print(f"{ds.name}/{args.split}: {len(tracks)} songs, {args.snippets} windows of {args.seconds:.0f} s")
+    print(f"{ds.name}/{args.split}: {len(tracks)} songs, {args.snippets} windows of {args.seconds:.0f} s, oracle STFT n_fft {args.n_fft} hop {args.hop}")
 
     models, names = {}, None
     for r in args.runs:
         label, folder = r.split("=", 1)
         models[label], names = load_model(Path(folder))
     names = names or ["drums", "bass", "vocals", "guitar", "keys", "other"]
-    stft = Separator(len(names), 2, 2048, 1024, 4, 3)
+    stft = Separator(len(names), 2, args.n_fft, args.hop, 4, 3)
     rows = {"oracle p=1": {}, "oracle p=2": {}, **{k: {} for k in models}}  # label -> source -> [improvements]
 
     for i in range(args.snippets):
